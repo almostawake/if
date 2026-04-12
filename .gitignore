@@ -1,0 +1,19 @@
+node_modules/
+client/node_modules/
+client/build/
+client/.svelte-kit/
+client/public/*.json
+
+# Firebase
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store

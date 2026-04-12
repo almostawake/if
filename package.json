@@ -1,0 +1,16 @@
+{
+  "name": "appsvelte",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "install:all": "npm i && cd client && npm i",
+    "build:all": "cd client && npm run build",
+    "start:emulators": "firebase --project demo-not-required emulators:start --only auth,functions,firestore,storage --export-on-exit=emulator-data --import=emulator-data 2>&1 | tee /tmp/firebase-emulator.log",
+    "start:client": "cd client && npm run dev",
+    "check": "cd client && npm run check",
+    "deploy": "npm run build:all && firebase --project appsvelte deploy"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.9.1"
+  }
+}
