@@ -74,7 +74,7 @@ See **CLAUDE-PROBE.md** for the probe's narrative, capability map, default confi
 
 ---
 
-## Directory structure
+## Client Directory structure
 
 ```
 client/

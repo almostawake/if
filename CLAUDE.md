@@ -1,6 +1,10 @@
 # Ways of Working
 
-See **CLAUDE-STACK.md** for the target tech stack and architecture, **CLAUDE-PROBE.md** for the scope of the bundled demo probe (what's plumbing vs what's disposable), and **CLAUDE-SVELTE.md** for Svelte 5 rune conventions — read that one before writing any Svelte code.
+Read the relevant topic file before working in its area:
+- **CLAUDE-STACK.md** — target tech stack and architecture.
+- **CLAUDE-PROBE.md** — scope of the bundled demo probe (what's plumbing vs what's disposable).
+- **CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
+- **CLAUDE-JEKYLL.md** — porting/cloning an existing website to a simple Jekyll + GitHub Pages site the user can edit with an LLM. **Scope:** static / server-rendered content sites (Wordpress, Wordpress.com, Squarespace, Ghost, hand-rolled HTML). Trigger signals from a non-techie user: "clone/copy/rebuild my website", "move off Wordpress/Squarespace/Ghost", "host on GitHub", "make my site simpler / easier to edit", "I want to edit my site with Claude/AI", "just a blog/portfolio/landing page/brochure site", or supplying the URL of their current site and asking for a fresh version. **Not a fit:** client-rendered SPAs (Framer, heavy Webflow, Wix app-style sites) — tell the user this template isn't the right fit and stop. When in doubt whether a website request fits, read this file and check.
 
 ## Audience
 
