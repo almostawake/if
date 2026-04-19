@@ -127,6 +127,77 @@ src/lib/state/categoriesStore.ts           ← ❌ runes will error
 
 Services and utils that *don't* use runes stay as plain `.ts`.
 
+**`$effect` at module top-level does NOT work** — even inside `.svelte.ts`. Effects must run inside a component lifecycle or inside `$effect.root()`. For a singleton store that needs long-lived subscriptions (like Firestore `onSnapshot`):
+
+```ts
+// ✅ Expose start()/stop(); call them from the root +layout.svelte
+class OwnersStore {
+  items = $state<Owner[]>([])
+  private unsub: (() => void) | null = null
+  start = async () => {
+    const { db } = await getFirebaseServices()
+    this.unsub = onSnapshot(collection(db, 'owners'), (snap) => {
+      this.items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Owner)
+    })
+  }
+  stop = () => { this.unsub?.(); this.unsub = null }
+}
+```
+
+```svelte
+<!-- +layout.svelte -->
+<script lang="ts">
+  import { ownersStore } from '$lib/state/OwnersStore.svelte'
+  $effect(() => {
+    ownersStore.start()
+    return () => ownersStore.stop()
+  })
+</script>
+```
+
+Alternative: `$effect.root(fn)` creates an unscoped effect and returns a `destroy()` function. Prefer the `start()`/`stop()` pattern — simpler, piggybacks on component cleanup.
+
+## Class-based rune stores — gotchas
+
+- **`this` binding**: method references lose `this`. Passing `onclick={store.reset}` makes `this === <button>`. Use **arrow-function fields** (`reset = () => {...}`) or wrap inline (`onclick={() => store.reset()}`). Arrow-field is the convention here.
+- **Empty-array inference**: `foo = $state([])` infers `never[]`. Use explicit generic: `foo = $state<Owner[]>([])`.
+- **Class instances inside `$state` are not further proxied**. Prefer plain objects/arrays inside state; use classes for the store itself and for behaviour, not for data rows.
+- **`$state.raw`** disables the deep proxy — useful when you only ever reassign the whole value (e.g. swapping a full Firestore snapshot result): `rows = $state.raw<Owner[]>([])` then `this.rows = snap.docs.map(...)`.
+- **Destructuring breaks reactivity**: `const { items } = store` snapshots the value. Keep reads on the store (`store.items`).
+- **You cannot `export let x = $state(0)` and reassign across modules.** Export a singleton instance of a class and mutate its fields instead.
+
+## Reactive Maps / Sets / Dates / URLs
+
+Native `Map`, `Set`, `Date`, `URL` are not reactive in `$state`. Import from `svelte/reactivity`:
+
+```ts
+import { SvelteMap, SvelteSet, SvelteDate, SvelteURL } from 'svelte/reactivity'
+
+class CategoriesStore {
+  byId = new SvelteMap<string, Category>()
+}
+```
+
+## SvelteKit: use `$app/state`, not `$app/stores`
+
+`$app/stores` is **deprecated**. Use `$app/state` (SvelteKit 2.12+):
+
+```svelte
+<!-- ❌ -->
+<script>
+  import { page } from '$app/stores'
+  $: id = $page.params.id
+</script>
+
+<!-- ✅ -->
+<script>
+  import { page } from '$app/state'
+  let id = $derived(page.params.id)
+</script>
+```
+
+`$app/state` values are only reactive via runes — a `$:` reactive statement won't track them.
+
 ## Snippets, not slots (mostly)
 
 Svelte 5 added `{#snippet}` / `{@render}` which replace most uses of slots. Slots still work, but snippets are more flexible (typed, can take arguments, can be passed as props).
@@ -163,7 +234,7 @@ For default slot content, `{@render children?.()}` where `children` is destructu
 
 ## Stores (`writable` / `readable`) — avoid for new code
 
-Svelte 4 stores (`writable`, `readable`, `derived` from `svelte/store`, `$store` auto-subscription) still work but are not our pattern. Use **class-based rune stores** instead (see CLAUDE-STACK.md § State pattern). Only touch `svelte/store` if integrating with a library that returns one.
+Svelte 4 stores (`writable`, `readable`, `derived` from `svelte/store`, `$store` auto-subscription) still work and aren't formally deprecated — the docs say their use cases have "greatly diminished". They remain useful for RxJS/async-stream interop but are not our pattern for new state. Use **class-based rune stores** instead (see CLAUDE-STACK.md § State pattern). Only touch `svelte/store` if integrating with a library that returns one.
 
 ## Quick drift checklist
 
@@ -177,3 +248,7 @@ When reviewing LLM-generated Svelte code, scan for these red flags — any one i
 - [ ] Runes in a plain `.ts` file → rename to `.svelte.ts`
 - [ ] Top-level `let count = 0` used reactively → should be `let count = $state(0)`
 - [ ] `<slot />` in new components → prefer `{@render children()}` or named snippets
+- [ ] `$app/stores` imports → should be `$app/state`
+- [ ] `new Map()` / `new Set()` inside `$state` → should be `SvelteMap` / `SvelteSet` from `svelte/reactivity`
+- [ ] `$effect(...)` at module top-level of a `.svelte.ts` → won't run; move into a `start()` method called from root layout's `$effect`
+- [ ] `onclick={store.method}` (bare method ref) → arrow-function field or wrap inline to preserve `this`
