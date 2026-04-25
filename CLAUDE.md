@@ -2,8 +2,8 @@
 
 Read the relevant topic file before working in its area:
 - **CLAUDE-STACK.md** — target tech stack and architecture.
-- **CLAUDE-PROBE.md** — scope of the bundled demo probe (what's plumbing vs what's disposable).
 - **CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
+- **CLAUDE-PROVISIONING.md** — GCP/Firebase provisioning sequence: API contract, propagation timings, dead ends. Read before touching the bootstrapper or any "first deploy" flow.
 
 ## Audience
 
