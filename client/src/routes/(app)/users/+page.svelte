@@ -58,7 +58,7 @@
         {#if allowedEmailsStore.emails.length > 1}
           <button
             type="button"
-            class="text-err opacity-0 group-hover:opacity-100"
+            class="text-[24px] leading-none text-err opacity-0 group-hover:opacity-100"
             onclick={() => remove(item.email)}
             aria-label="Remove {item.email}"
           >
