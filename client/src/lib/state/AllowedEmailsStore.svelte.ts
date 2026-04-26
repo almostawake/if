@@ -23,6 +23,12 @@ class AllowedEmailsStore {
     this.unsub = onSnapshot(
       q,
       (snap) => {
+        // Skip cached snapshots — they can fire with partial data when
+        // a sibling code path (e.g. AuthStore.checkWhitelist) has warmed
+        // the cache with a single doc. Waiting for the server snapshot
+        // means the user sees the full list at once instead of a
+        // flash-of-one-row → flash-of-all-rows transition.
+        if (snap.metadata.fromCache) return;
         this.emails = snap.docs.map((d) => d.data() as AllowedEmail);
         this.loaded = true;
       },

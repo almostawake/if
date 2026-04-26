@@ -32,7 +32,10 @@
     return () => allowedEmailsStore.stop();
   });
 
-  const navItems = [{ href: '/users', label: 'Manage users' }];
+  const navItems = [
+    { href: '/', label: 'home' },
+    { href: '/users', label: 'manage users' }
+  ];
 
   function toggleMenu() {
     menuOpen = !menuOpen;
@@ -89,14 +92,14 @@
                 class="block w-full px-3 py-2 text-left hover:bg-bg-hover"
                 onclick={handleSignOut}
               >
-                Sign out
+                sign out
               </button>
             </li>
           </ul>
         </nav>
       {/if}
     </div>
-    <div class="ml-auto text-fg-faint">
+    <div class="ml-auto text-[15px] text-fg-faint">
       {authStore.user?.email ?? ''}
     </div>
   </header>
@@ -106,8 +109,13 @@
     left edge, defined in app.css) so every page in this group aligns
     with the menu icon. New pages should not add their own horizontal
     padding — they inherit this.
+
+    `flex flex-col` makes <main> a flex column so a page can opt into
+    filling the remaining height (e.g. home's centred placeholder uses
+    `flex-1`); pages that just stack content at the top need no extra
+    classes.
   -->
-  <main class="flex-1 overflow-auto py-4 pr-3 pl-[var(--page-gutter)]">
+  <main class="flex flex-1 flex-col overflow-auto py-4 pr-3 pl-[var(--page-gutter)]">
     {@render children()}
   </main>
 </div>

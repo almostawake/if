@@ -12,7 +12,7 @@
 
   $effect(() => {
     if (authStore.loaded && authStore.user && authStore.whitelisted === true) {
-      goto('/users', { replaceState: true });
+      goto('/', { replaceState: true });
     }
   });
 
@@ -37,10 +37,10 @@
     <form onsubmit={submit} class="space-y-3">
       {#if denied}
         <div class="text-err">
-          That email isn't on the access list. Ask someone who's already in to add you.
+          that email isn't on the access list. ask someone who's already in to add you.
         </div>
       {/if}
-      <label for="email" class="section-label block">Email</label>
+      <label for="email" class="section-label block">email</label>
       <div class="flex items-center gap-2">
         <input
           id="email"
@@ -52,7 +52,7 @@
           placeholder="you@example.com"
         />
         <button class="tx-btn" type="submit" disabled={sending || !email.trim()}>
-          {sending ? 'Sending…' : 'Sign in'}
+          {sending ? 'sending…' : 'sign in'}
         </button>
       </div>
       {#if error}
@@ -60,6 +60,6 @@
       {/if}
     </form>
   {:else}
-    <p>Check your email for the magic link.</p>
+    <p>check your email for the magic link.</p>
   {/if}
 </div>

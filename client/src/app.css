@@ -48,12 +48,12 @@
 
 /* Components layer: project-wide classes that utilities can still override. */
 @layer components {
+  /* Small, faint label (e.g. form-field labels). Lowercase per the
+     project-wide no-caps rule — never re-add text-transform here. */
   .section-label {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 500;
     color: var(--color-fg-faint);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
 
   .tx-input {

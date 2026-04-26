@@ -11,13 +11,13 @@
     const href = window.location.href;
     if (!AuthService.isLink(href)) {
       status = 'error';
-      error = "This doesn't look like a sign-in link.";
+      error = "this doesn't look like a sign-in link.";
       return;
     }
     try {
       await AuthService.completeEmailLink(href);
       status = 'done';
-      goto('/users', { replaceState: true });
+      goto('/', { replaceState: true });
     } catch (e) {
       const msg = (e as Error).message;
       // Most likely cause: opened on a different device, so localStorage
@@ -36,7 +36,7 @@
     try {
       await AuthService.completeEmailLink(window.location.href, email.trim());
       status = 'done';
-      goto('/users', { replaceState: true });
+      goto('/', { replaceState: true });
     } catch (err) {
       status = 'error';
       error = (err as Error).message;
@@ -46,12 +46,12 @@
 
 <div class="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
   {#if status === 'working'}
-    <div class="text-fg-faint">Signing you in…</div>
+    <div class="text-fg-faint">signing you in…</div>
   {:else if status === 'need-email'}
     <div class="space-y-3">
-      <div class="section-label">Confirm your email</div>
+      <div class="section-label">confirm your email</div>
       <p>
-        Looks like you opened the link on a different device. Enter the email you signed in with
+        looks like you opened the link on a different device. enter the email you signed in with
         to finish:
       </p>
       <form onsubmit={submitEmail} class="space-y-3">
@@ -62,14 +62,14 @@
           bind:value={email}
           placeholder="you@example.com"
         />
-        <button class="tx-btn w-full" type="submit" disabled={!email.trim()}>Continue</button>
+        <button class="tx-btn w-full" type="submit" disabled={!email.trim()}>continue</button>
       </form>
     </div>
   {:else if status === 'error'}
     <div class="space-y-3">
-      <div class="section-label text-err">Sign-in failed</div>
+      <div class="section-label text-err">sign-in failed</div>
       <p class="text-fg-muted">{error}</p>
-      <a href="/login" class="text-accent">Try again →</a>
+      <a href="/login" class="text-accent">try again →</a>
     </div>
   {/if}
 </div>

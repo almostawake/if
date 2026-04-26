@@ -1,6 +1,7 @@
 <script lang="ts">
   import { authStore } from '$lib/state/AuthStore.svelte';
   import { allowedEmailsStore } from '$lib/state/AllowedEmailsStore.svelte';
+  import Page from '$lib/components/Page.svelte';
 
   let adding = $state(false);
   let newEmail = $state('');
@@ -50,19 +51,29 @@
   }
 </script>
 
-<div class="pt-8">
+<Page
+  title="whitelisted users"
+  description="these users will be allowed to log in and see everything."
+>
   <ul class="space-y-1">
     {#each allowedEmailsStore.emails as item (item.email)}
       <li class="group flex items-center gap-2">
         <span>{item.email}</span>
         {#if allowedEmailsStore.emails.length > 1}
+          <!--
+            Two layered hover states. Row-hover (`group`) reveals the ×
+            button; button-hover (`group/del`) additionally reveals the
+            "delete <email>" label. Mirrors the `+ add a user` pattern
+            below, just in red.
+          -->
           <button
             type="button"
-            class="text-[24px] leading-none text-err opacity-0 group-hover:opacity-100"
+            class="group/del inline-flex items-center gap-2 text-err opacity-0 group-hover:opacity-100"
             onclick={() => remove(item.email)}
-            aria-label="Remove {item.email}"
+            aria-label="delete {item.email}"
           >
-            ×
+            <span class="text-[24px] leading-none">×</span>
+            <span class="opacity-0 transition-opacity group-hover/del:opacity-100">delete</span>
           </button>
         {/if}
       </li>
@@ -75,7 +86,7 @@
         type="button"
         class="group inline-flex items-center gap-2 text-fg-faint hover:text-fg"
         onclick={startAdd}
-        aria-label="Add a user"
+        aria-label="add a user"
       >
         <span class="text-[24px] leading-none">+</span>
         <span class="opacity-0 transition-opacity group-hover:opacity-100">add a user</span>
@@ -92,9 +103,9 @@
           onkeydown={(e) => { if (e.key === 'Escape') cancelAdd(); }}
         />
         <button class="tx-btn" type="submit" disabled={saving || !newEmail.trim()}>
-          {saving ? '…' : 'Add'}
+          {saving ? '…' : 'add'}
         </button>
-        <button class="tx-btn-ghost" type="button" onclick={cancelAdd}>Cancel</button>
+        <button class="tx-btn-ghost" type="button" onclick={cancelAdd}>cancel</button>
       </form>
     {/if}
   </div>
@@ -102,4 +113,4 @@
   {#if error}
     <div class="mt-3 text-err">{error}</div>
   {/if}
-</div>
+</Page>
