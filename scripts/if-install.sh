@@ -73,20 +73,32 @@ have_claude=false
 command -v claude >/dev/null 2>&1 && have_claude=true
 
 have_git=false
-git_path="$(command -v git 2>/dev/null || true)"
-if [ -n "$git_path" ]; then
-  case "$git_path" in
-    /usr/bin/git)
-      # macOS ships /usr/bin/git as a stub that triggers the CLT install
-      # dialog when invoked. Real only once Xcode CLT/app is installed.
-      xcode-select -p >/dev/null 2>&1 && have_git=true
-      ;;
-    *) have_git=true ;;
-  esac
+# Check ~/.if/git/bin/git directly first — i.sh (the bootstrap) installs
+# there but doesn't update PATH, so `command -v git` misses it on fresh
+# shells. The wrapper-presence sentinel (git.real) ensures we don't
+# treat a half-broken pre-wrapper install as healthy.
+if [ -x "$IF_HOME/git/bin/git" ] && [ -x "$IF_HOME/git/bin/git.real" ]; then
+  have_git=true
+else
+  git_path="$(command -v git 2>/dev/null || true)"
+  if [ -n "$git_path" ]; then
+    case "$git_path" in
+      /usr/bin/git)
+        # macOS ships /usr/bin/git as a stub that triggers the CLT install
+        # dialog when invoked. Real only once Xcode CLT/app is installed.
+        xcode-select -p >/dev/null 2>&1 && have_git=true
+        ;;
+      *) have_git=true ;;
+    esac
+  fi
 fi
 
 have_gh=false
-command -v gh >/dev/null 2>&1 && have_gh=true
+if [ -x "$IF_HOME/gh/bin/gh" ]; then
+  have_gh=true
+elif command -v gh >/dev/null 2>&1; then
+  have_gh=true
+fi
 
 # Chrome row represents Chrome.app + Claude-connected launcher together —
 # only "installed" when both exist.
@@ -106,14 +118,16 @@ fi
 
 fetch_bottle() {
   local pkg="$1" tag="$2" stage="$3"
-  local json url token
+  local json url token pkg_repo
+  # ghcr scope uses slash form for versioned formulae: openssl@3 → openssl/3
+  pkg_repo=$(printf '%s' "$pkg" | tr '@' '/')
   json=$(curl -fsSL "https://formulae.brew.sh/api/formula/${pkg}.json") || return 1
   url=$(printf '%s' "$json" | perl -MJSON::PP -e "
     my \$j = decode_json(join('', <STDIN>));
     my \$f = \$j->{bottle}{stable}{files}{'${tag}'};
     print \$f->{url} if \$f;") || return 1
   [ -z "$url" ] && return 1
-  token=$(curl -fsSL "https://ghcr.io/token?service=ghcr.io&scope=repository:homebrew/core/${pkg}:pull" \
+  token=$(curl -fsSL "https://ghcr.io/token?service=ghcr.io&scope=repository:homebrew/core/${pkg_repo}:pull" \
     | perl -MJSON::PP -e 'my $j = decode_json(join("",<STDIN>)); print $j->{token}') || return 1
   curl -fsSL -H "Authorization: Bearer $token" "$url" | tar -xz -C "$stage" || return 1
 }
@@ -168,22 +182,50 @@ _install_git() {
 _install_git_bottle() {
   local tag="$1"
   local stage; stage=$(mktemp -d)
-  fetch_bottle git     "$tag" "$stage" || { rm -rf "$stage"; return 1; }
-  fetch_bottle pcre2   "$tag" "$stage" || { rm -rf "$stage"; return 1; }
-  fetch_bottle gettext "$tag" "$stage" || { rm -rf "$stage"; return 1; }
-  local git_ver pcre2_ver gettext_ver
-  git_ver=$(ls "$stage/git" | head -1)
-  pcre2_ver=$(ls "$stage/pcre2" | head -1)
-  gettext_ver=$(ls "$stage/gettext" | head -1)
+  # Ship git + transitive lib closure: git itself wants pcre2/gettext;
+  # git-remote-http wants libcurl with newer symbols than older Sonoma's
+  # /usr/lib/libcurl.4.dylib exports; libcurl drags openssl@3, nghttp2/3,
+  # ngtcp2, libssh2, brotli, zstd. ~8MB total, closure verified empirically.
+  for p in git pcre2 gettext curl openssl@3 libnghttp2 libnghttp3 libngtcp2 libssh2 brotli zstd; do
+    fetch_bottle "$p" "$tag" "$stage" || { rm -rf "$stage"; return 1; }
+  done
   rm -rf "$IF_HOME/git"
   mkdir -p "$IF_HOME/git/lib"
-  cp -R "$stage/git/$git_ver/." "$IF_HOME/git/"
-  cp "$stage/pcre2/$pcre2_ver/lib/libpcre2-8.0.dylib" "$IF_HOME/git/lib/"
-  cp "$stage/gettext/$gettext_ver/lib/libintl.8.dylib" "$IF_HOME/git/lib/"
+  cp -R "$stage/git/"*"/." "$IF_HOME/git/"
+  cp "$stage/pcre2/"*"/lib/libpcre2-8.0.dylib"               "$IF_HOME/git/lib/"
+  cp "$stage/gettext/"*"/lib/libintl.8.dylib"                "$IF_HOME/git/lib/"
+  cp "$stage/curl/"*"/lib/libcurl.4.dylib"                   "$IF_HOME/git/lib/"
+  cp "$stage/openssl@3/"*"/lib/libssl.3.dylib"               "$IF_HOME/git/lib/"
+  cp "$stage/openssl@3/"*"/lib/libcrypto.3.dylib"            "$IF_HOME/git/lib/"
+  cp "$stage/libnghttp2/"*"/lib/libnghttp2.14.dylib"         "$IF_HOME/git/lib/"
+  cp "$stage/libnghttp3/"*"/lib/libnghttp3.9.dylib"          "$IF_HOME/git/lib/"
+  cp "$stage/libngtcp2/"*"/lib/libngtcp2.16.dylib"           "$IF_HOME/git/lib/"
+  cp "$stage/libngtcp2/"*"/lib/libngtcp2_crypto_ossl.0.dylib" "$IF_HOME/git/lib/"
+  cp "$stage/libssh2/"*"/lib/libssh2.1.dylib"                "$IF_HOME/git/lib/"
+  cp "$stage/brotli/"*"/lib/libbrotlidec.1.dylib"            "$IF_HOME/git/lib/"
+  cp "$stage/brotli/"*"/lib/libbrotlicommon.1.dylib"         "$IF_HOME/git/lib/"
+  cp "$stage/zstd/"*"/lib/libzstd.1.dylib"                   "$IF_HOME/git/lib/"
   rm -rf "$stage"
-  # Verify by running it once; set DYLD_FALLBACK_LIBRARY_PATH so the
-  # baked-in @@HOMEBREW_PREFIX@@ paths resolve.
-  DYLD_FALLBACK_LIBRARY_PATH="$IF_HOME/git/lib" "$IF_HOME/git/bin/git" --version >/dev/null
+  # See i.sh for the full reasoning. Wrapper re-exports env that gets
+  # stripped by dyld when hardened callers (gh, codesigned shells) exec
+  # git: DYLD_LIBRARY_PATH (override leaf-name lookup), GIT_EXEC_PATH
+  # (libexec/git-core), SSL_CERT_FILE / CURL_CA_BUNDLE (CA bundle —
+  # Homebrew openssl's compiled-in path is unresolvable, point at
+  # macOS's /etc/ssl/cert.pem instead).
+  mv "$IF_HOME/git/bin/git" "$IF_HOME/git/bin/git.real"
+  cat > "$IF_HOME/git/bin/git" <<'WRAP'
+#!/bin/bash
+export DYLD_LIBRARY_PATH="$HOME/.if/git/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+export GIT_EXEC_PATH="$HOME/.if/git/libexec/git-core"
+export SSL_CERT_FILE="${SSL_CERT_FILE:-/etc/ssl/cert.pem}"
+export CURL_CA_BUNDLE="${CURL_CA_BUNDLE:-/etc/ssl/cert.pem}"
+exec "$HOME/.if/git/bin/git.real" "$@"
+WRAP
+  chmod +x "$IF_HOME/git/bin/git"
+  # End-to-end smoke test: --version exercises libintl, ls-remote
+  # exercises the entire HTTPS chain. Failure → fall through to CLT.
+  "$IF_HOME/git/bin/git" --version >/dev/null
+  "$IF_HOME/git/bin/git" ls-remote https://github.com/octocat/Hello-World.git HEAD >/dev/null 2>&1
 }
 
 _install_git_xcode() {
