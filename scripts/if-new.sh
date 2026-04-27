@@ -711,27 +711,27 @@ print_setup_needed_terminal() {
   echo ""
   case "$reason" in
     no_firebase_tos)
-      echo "  ✗ Firebase Terms of Service not accepted yet for $email."
+      echo "✗ Firebase Terms of Service not accepted yet for $email."
       echo ""
-      echo "    Fastest fix: open Firebase Console and start their"
-      echo "    'create a project' flow once. It bundles ToS acceptance."
+      echo "  Fastest fix: open Firebase Console and start their"
+      echo "  'create a project' flow once. It bundles ToS acceptance."
       echo ""
-      echo "    https://console.firebase.google.com/"
+      echo "  https://console.firebase.google.com/"
       ;;
     no_billing)
-      echo "  ✗ No billing account set up yet for $email."
+      echo "✗ No billing account set up yet for $email."
       echo ""
-      echo "    Fastest fix: open Firebase Console, click Create a project,"
-      echo "    accept the free trial when prompted."
+      echo "  Fastest fix: open Firebase Console, click Create a project,"
+      echo "  accept the free trial when prompted."
       echo ""
-      echo "    https://console.firebase.google.com/"
+      echo "  https://console.firebase.google.com/"
       ;;
     *)
-      echo "  ✗ Setup issue for $email: $reason"
+      echo "✗ Setup issue for $email: $reason"
       ;;
   esac
   echo ""
-  echo "  Then re-run this script."
+  echo "Then re-run this script."
   echo ""
 }
 
@@ -870,7 +870,7 @@ draw_prov_row() {
     pending) icon="${C_GRAY}○${C_RST}"; color="$C_GRAY"; label="${PROV_PENDING[$i]}" ;;
     failed)  icon="${C_RED}✗${C_RST}";  color="$C_RED";  label="${PROV_RUNNING[$i]}" ;;
   esac
-  printf '  %b  %b%s%b\n' "$icon" "$color" "$label" "$C_RST"
+  printf '%b  %b%s%b\n' "$icon" "$color" "$label" "$C_RST"
 }
 
 # update_prov_row — move cursor up to row i, redraw, return cursor.
@@ -1224,7 +1224,7 @@ trap - EXIT
 # Sign-in didn't complete (cancelled, fatal error, etc).
 if [ -z "$ACCESS_TOKEN" ] || [ -z "$EMAIL" ]; then
   echo ""
-  echo "  Sign-in didn't complete. Re-run when ready."
+  echo "Sign-in didn't complete. Re-run when ready."
   echo ""
   exit 1
 fi
@@ -1254,39 +1254,39 @@ prompt_create_project() {
     if [ ${#tried_names[@]} -gt 0 ]; then
       joined=$(printf "%s, " "${tried_names[@]}")
       joined="${joined%, }"
-      printf "  ${C_GRAY}already tried: %s${C_RST}\n" "$joined"
+      printf "${C_GRAY}already tried: %s${C_RST}\n" "$joined"
     fi
-    printf "  project id: "
+    printf "project id: "
     read -r candidate </dev/tty || candidate=""
     if ! validate_gcp_project_id "$candidate"; then
       for e in "${VALIDATION_ERRORS[@]}"; do
-        printf "  ${C_RED}✗  %s${C_RST}\n" "$e"
+        printf "${C_RED}✗  %s${C_RST}\n" "$e"
       done
       echo ""
       continue
     fi
-    printf "  ${C_GRAY}⋯  creating %s${C_RST}" "$candidate"
+    printf "${C_GRAY}⋯  creating %s${C_RST}" "$candidate"
     result=$(create_project "$candidate")
     printf "\r\033[K"
     case "$result" in
       ok)
-        printf "  ${C_GRN}✓  %s created${C_RST}\n" "$candidate"
+        printf "${C_GRN}✓  %s created${C_RST}\n" "$candidate"
         PID="$candidate"
         ;;
       taken)
-        printf "  ${C_RED}✗  %s is taken${C_RST}\n\n" "$candidate"
+        printf "${C_RED}✗  %s is taken${C_RST}\n\n" "$candidate"
         tried_names+=("$candidate")
         ;;
       timeout)
-        printf "  ${C_RED}✗  create timed out for %s${C_RST}\n\n" "$candidate"
+        printf "${C_RED}✗  create timed out for %s${C_RST}\n\n" "$candidate"
         tried_names+=("$candidate")
         ;;
       err*)
-        printf "  ${C_RED}✗  error creating %s (HTTP %s)${C_RST}\n\n" "$candidate" "${result#err}"
+        printf "${C_RED}✗  error creating %s (HTTP %s)${C_RST}\n\n" "$candidate" "${result#err}"
         tried_names+=("$candidate")
         ;;
       *)
-        printf "  ${C_RED}✗  unexpected result (%s) for %s${C_RST}\n\n" "$result" "$candidate"
+        printf "${C_RED}✗  unexpected result (%s) for %s${C_RST}\n\n" "$result" "$candidate"
         tried_names+=("$candidate")
         ;;
     esac
@@ -1308,16 +1308,16 @@ else
     echo ""
     n=1
     for p in "${EXISTING_PIDS[@]}"; do
-      printf "  %d. %s\n" "$n" "$p"
+      printf "%d. %s\n" "$n" "$p"
       n=$((n + 1))
     done
-    printf "  %d. + create a new project\n" "$n"
+    printf "%d. + create a new project\n" "$n"
     echo ""
-    printf "  > "
+    printf "> "
     read -r choice </dev/tty || choice=""
 
     if [[ ! "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "$n" ]; then
-      printf "  ${C_RED}✗  pick a number 1-%d${C_RST}\n\n" "$n"
+      printf "${C_RED}✗  pick a number 1-%d${C_RST}\n\n" "$n"
       continue
     fi
 
@@ -1327,18 +1327,18 @@ else
     else
       PID="${EXISTING_PIDS[$((choice - 1))]}"
       echo ""
-      printf "  ${C_GRN}✓  using %s${C_RST}\n" "$PID"
+      printf "${C_GRN}✓  using %s${C_RST}\n" "$PID"
     fi
   done
 fi
 
 if ! provision_all; then
-  echo "  ✗ provisioning didn't complete. See /tmp/if-new.log for details."
+  echo "✗ provisioning didn't complete. See /tmp/if-new.log for details."
   echo ""
   exit 1
 fi
 
 echo ""
-echo "  Project: $PID"
-echo "  Console: https://console.firebase.google.com/project/$PID"
+echo "Project: $PID"
+echo "Console: https://console.firebase.google.com/project/$PID"
 echo ""
