@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# if-new.sh — create a new GCP/Firebase project and provision everything
+# n — create a new GCP/Firebase project and provision everything
 # the template needs to deploy.
 #
 # Architecture:
@@ -11,13 +11,13 @@
 #   - SECTION 4: Browser dispatcher — runs OAuth/picker, then hands off.
 #   - SECTION 5: Terminal flow — project name + provisioning.
 #
-# Run via the public bootstrap (after install.sh has cloned this repo):
-#   curl -fsSL https://almostawake.com/new.sh | bash
+# Run after the bootstrap has cloned this repo:
+#   bash ~/.if/staging/scripts/n
 #
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SCRIPT_DIR/if-lib.sh"
+. "$SCRIPT_DIR/l"
 
 # =====================================================================
 # SECTION 1 — HTTP server (Perl-backed)
@@ -736,7 +736,7 @@ print_setup_needed_terminal() {
 }
 
 # Provisioning items, paired in lockstep with PROV_FNS — same shape as
-# if-install.sh's ITEMS / INSTALL_FNS so the row-update mechanism is
+# scripts/i's ITEMS / INSTALL_FNS so the row-update mechanism is
 # identical (○ pending → ⋯ running → ✓ done, in place).
 #
 # Three label arrays mirror state-appropriate phrasing:
@@ -1048,7 +1048,7 @@ build_setup_needed_html() {
   <li>Click <b>Create a project</b> (or <b>Add project</b>) if it isn't already open.</li>
   <li>Use <code>nothing</code> as the project name. We won't use this project — it's just to get the gates accepted.</li>
   <li>When asked to upgrade to Blaze / accept free-trial credits, accept.</li>
-  <li>Once the project finishes creating, come back to your terminal and re-run <code>if-new.sh</code>.</li>
+  <li>Once the project finishes creating, come back to your terminal and re-run <code>bash ~/.if/staging/scripts/n</code>.</li>
 </ol>
 <p class="small">You can close this tab.</p>
 </body></html>

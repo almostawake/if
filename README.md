@@ -36,7 +36,7 @@ takes about 5 minutes. follow the prompts as they appear.
 after install finishes, run:
 
 ```sh
-bash ~/.if/staging/scripts/if-new.sh
+bash ~/.if/staging/scripts/n
 ```
 
 this will:

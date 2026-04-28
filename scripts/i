@@ -15,7 +15,7 @@ set -e
 
 # --- Load shared helpers (colors, prompts, OS detection) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SCRIPT_DIR/if-lib.sh"
+. "$SCRIPT_DIR/l"
 
 # --- Constants ---
 NODE_VERSION="22.11.0"

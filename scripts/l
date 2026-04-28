@@ -3,7 +3,7 @@
 # if (impatient futurist) shared helpers
 #
 # Loaded by sibling scripts via:
-#   . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/if-lib.sh"
+#   . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/l"
 #
 # After that, every function/variable below is available in the calling
 # script's shell as if it had been defined inline.
@@ -83,7 +83,7 @@ prompt_project_name() {
 
 # --- Diagnostic report builder ---
 # Sets DIAG_REPORT (multi-line string) based on local machine state.
-# Reused by if-check.sh and if-install.sh for consistent reporting.
+# Reused across sibling scripts for consistent reporting.
 build_diagnostic_report() {
   local short_user hostname_val os_name os_version arch
   local node_ver node_path java_ver java_home_val claude_ver
