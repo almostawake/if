@@ -805,22 +805,12 @@ if [ "$N" -eq 0 ]; then
 fi
 
 # --- Initial list (cursor ends on the line just below the last row) ---
-echo "Installing:"
-echo ""
+# No header / no prompt: aa/i prints the section heading before exec'ing
+# us, and the "Ready to go?" up-front already covers consent for the
+# whole flow.
 for i in $(seq 0 $((N - 1))); do
   draw_row "$i" "pending"
 done
-
-# --- Prompt ---
-echo ""
-if ! prompt_yn "Go?" "Y"; then
-  say "No changes made. Goodbye."
-  exit 0
-fi
-
-# Wipe the prompt + blank line so cursor returns to "after list" position.
-# Prompt added 2 lines (blank + prompt with Enter).
-printf '\033[2A\033[J'
 
 # --- Run installs (UI rows update in place) ---
 for i in "${!ITEMS[@]}"; do
