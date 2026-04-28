@@ -15,15 +15,19 @@
 # --- Color helpers ---
 if [ -t 1 ]; then
   C_RED=$'\033[31m'; C_GRN=$'\033[32m'; C_GRAY=$'\033[90m'
+  C_BLU=$'\033[34m'
   C_BLD=$'\033[1m'; C_RST=$'\033[0m'
 else
-  C_RED=""; C_GRN=""; C_GRAY=""; C_BLD=""; C_RST=""
+  C_RED=""; C_GRN=""; C_GRAY=""; C_BLU=""; C_BLD=""; C_RST=""
 fi
 
 tick()  { printf "${C_GRN}✓${C_RST}"; }
 dot()   { printf "${C_GRAY}○${C_RST}"; }
 bold()  { printf "${C_BLD}%s${C_RST}" "$1"; }
 gray()  { printf "${C_GRAY}%s${C_RST}" "$1"; }
+# Section heading: bold + blue + uppercase. Terminating newline so callers
+# don't have to remember it. Uses tr (bash 3.2 compat).
+heading() { printf "${C_BLD}${C_BLU}%s${C_RST}\n" "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"; }
 
 say()   { printf '%s\n' "$*"; }
 die()   { printf "${C_RED}error:${C_RST} %s\n" "$*" >&2; exit 1; }
