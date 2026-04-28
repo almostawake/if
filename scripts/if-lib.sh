@@ -1,10 +1,9 @@
 #!/bin/bash
 #
-# appsvelte shared helpers
-# https://truffledog.au/if-lib.sh
+# if (impatient futurist) shared helpers
 #
-# Loaded by other if-*.sh scripts via:
-#   eval "$(curl -fsSL https://truffledog.au/if-lib.sh)"
+# Loaded by sibling scripts via:
+#   . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/if-lib.sh"
 #
 # After that, every function/variable below is available in the calling
 # script's shell as if it had been defined inline.

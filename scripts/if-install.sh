@@ -272,12 +272,13 @@ _install_claude() {
   export PATH="$IF_HOME/claude/bin:$PATH"
   npm install --prefix "$IF_HOME/claude" -g @anthropic-ai/claude-code
 
-  # Seed config files (only if not already present — re-runs preserve state)
+  # Seed config files from the assets shipped in this repo (only if not
+  # already present — re-runs preserve state).
   mkdir -p "$IF_HOME/claude-config/.claude"
   [ -f "$IF_HOME/claude-config/.claude/CLAUDE.md" ] || \
-    curl -fsSL https://truffledog.au/if-a-claude.md -o "$IF_HOME/claude-config/.claude/CLAUDE.md"
+    cp "$SCRIPT_DIR/assets/claude.md" "$IF_HOME/claude-config/.claude/CLAUDE.md"
   [ -f "$IF_HOME/claude-config/.claude/settings.json" ] || \
-    curl -fsSL https://truffledog.au/if-a-claude-settings.json -o "$IF_HOME/claude-config/.claude/settings.json"
+    cp "$SCRIPT_DIR/assets/claude-settings.json" "$IF_HOME/claude-config/.claude/settings.json"
 
   # .claude.json needs a theme injected based on current system appearance —
   # dark theme for dark-mode users, light for light. Only runs on first
@@ -285,7 +286,7 @@ _install_claude() {
   # later changed via Claude's /theme command.
   local claude_json="$IF_HOME/claude-config/.claude.json"
   if [ ! -f "$claude_json" ]; then
-    curl -fsSL https://truffledog.au/if-a-claude.json -o "$claude_json"
+    cp "$SCRIPT_DIR/assets/claude.json" "$claude_json"
     if [ "$OS" = "darwin" ]; then
       local theme="light"
       defaults read -g AppleInterfaceStyle 2>/dev/null | grep -q Dark && theme="dark"
@@ -386,7 +387,7 @@ _install_chrome() {
   <key>CFBundleIconName</key>
   <string>app</string>
   <key>CFBundleIdentifier</key>
-  <string>au.truffledog.chrome-claude-code</string>
+  <string>com.almostawake.if.chrome-claude-code</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleVersion</key>
@@ -522,7 +523,7 @@ IFTERMSCPT
 
   # Set a stable bundle identifier (osacompile auto-generates a weird
   # com.apple.ScriptEditor.id.* one by default).
-  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier au.truffledog.if-terminal" \
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.almostawake.if.terminal" \
     "$if_term/Contents/Info.plist" 2>/dev/null || true
 
   # Bumping mtime forces LaunchServices/Dock to re-register the icon if we
@@ -536,12 +537,10 @@ IFTERMSCPT
   # pick up any content changes in the workflow.
   mkdir -p "$HOME/Library/Services"
   rm -rf "$HOME/Library/Services/Claude Code at Folder.workflow"
-  local qa_zip; qa_zip=$(mktemp -u).zip
-  if curl -fsSL https://truffledog.au/if-a-quick-action.zip -o "$qa_zip"; then
-    unzip -q -o "$qa_zip" -d "$HOME/Library/Services/" || true
+  if [ -f "$SCRIPT_DIR/assets/quick-action.zip" ]; then
+    unzip -q -o "$SCRIPT_DIR/assets/quick-action.zip" -d "$HOME/Library/Services/" || true
     rm -rf "$HOME/Library/Services/__MACOSX"
   fi
-  rm -f "$qa_zip"
 
   # === Pass 1: all `defaults write` calls ===
   # These go to cfprefsd's in-memory cache, not directly to disk.
@@ -550,6 +549,13 @@ IFTERMSCPT
   #     + right-click New Terminal at Folder workflow.
   defaults write com.apple.finder NewWindowTarget -string "PfLo" 2>/dev/null || true
   defaults write com.apple.finder NewWindowTargetPath -string "file://$HOME/if/" 2>/dev/null || true
+
+  # (A2) Clean Dock — start the user from a near-empty state so the only
+  #      things they see are Finder (always-pinned by macOS), Safari,
+  #      System Settings, and our two custom inserts (Chrome with Claude,
+  #      IF Terminal). Recent apps section turned off so the right side
+  #      doesn't fill up with whatever they happen to launch.
+  defaults write com.apple.dock show-recents -bool false 2>/dev/null || true
 
   # (B) pbs NSServicesStatus writes intentionally deferred to after
   #     `pbs -update` at the bottom of this function. Writing them here
@@ -567,6 +573,43 @@ IFTERMSCPT
   sleep 0.3
 
   # === Pass 2: PlistBuddy edits on disk ===
+
+  # (C0) Strip the default Dock back to Safari + System Settings before
+  #      we add our entries. macOS's default Dock has Mail/Maps/Photos/
+  #      Music/Notes/etc. — clutter the user doesn't need on day 1.
+  #      Walk persistent-apps in reverse so deletes don't shift indices.
+  #      Identity is by tile-data:bundle-identifier (more stable than
+  #      _CFURLString — the URL form varies across macOS versions).
+  local DOCK_PLIST="$HOME/Library/Preferences/com.apple.dock.plist"
+  if [ -f "$DOCK_PLIST" ]; then
+    local i bid
+    i=0
+    while /usr/libexec/PlistBuddy -c "Print :persistent-apps:$i" "$DOCK_PLIST" >/dev/null 2>&1; do
+      i=$((i+1))
+    done
+    i=$((i-1))
+    while [ "$i" -ge 0 ]; do
+      bid=$(/usr/libexec/PlistBuddy -c "Print :persistent-apps:$i:tile-data:bundle-identifier" "$DOCK_PLIST" 2>/dev/null || true)
+      case "$bid" in
+        com.apple.Safari|com.apple.systempreferences) : ;;
+        *) /usr/libexec/PlistBuddy -c "Delete :persistent-apps:$i" "$DOCK_PLIST" 2>/dev/null || true ;;
+      esac
+      i=$((i-1))
+    done
+
+    # (C1) Nuke the right-side stacks (Downloads etc.) — empty Recents
+    #      shelf is already disabled via show-recents=false above; this
+    #      drops the persistent stacks too for a clean right side.
+    i=0
+    while /usr/libexec/PlistBuddy -c "Print :persistent-others:$i" "$DOCK_PLIST" >/dev/null 2>&1; do
+      i=$((i+1))
+    done
+    i=$((i-1))
+    while [ "$i" -ge 0 ]; do
+      /usr/libexec/PlistBuddy -c "Delete :persistent-others:$i" "$DOCK_PLIST" 2>/dev/null || true
+      i=$((i-1))
+    done
+  fi
 
   # (C) Dock left side, immediately right of Finder:
   #       slot 0 — Chrome with Claude Code (the debug-port-enabled launcher)
@@ -754,15 +797,6 @@ run_install() {
     exit 1
   fi
 }
-
-# --- Banner ---
-cat <<BANNER
-
-  ┌─────────────────────────────────┐
-  │     if — impatient futurist     │
-  └─────────────────────────────────┘
-
-BANNER
 
 # --- Short-circuit if everything's already installed ---
 if [ "$N" -eq 0 ]; then

@@ -27,7 +27,7 @@
 #   manually: sudo rm -rf /Library/Developer/CommandLineTools
 #
 # Usage:
-#   bash ~/_code/truffledog-website/if-u.sh
+#   bash ~/.if/staging/scripts/if-u.sh
 #
 set -e
 
