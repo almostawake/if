@@ -32,6 +32,37 @@ heading() { printf "${C_BLD}${C_BLU}%s${C_RST}\n" "$(printf '%s' "$1" | tr '[:lo
 say()   { printf '%s\n' "$*"; }
 die()   { printf "${C_RED}error:${C_RST} %s\n" "$*" >&2; exit 1; }
 
+# --- Open a URL in "Chrome with Claude Code" ---
+# Routes the URL through the same --user-data-dir as the launcher app
+# built by `scripts/i`, so a running Chrome-Claude instance receives it
+# (Chrome's process-singleton). If Chrome-Claude isn't running yet, this
+# becomes the cold-boot command and the URL becomes the first tab.
+# Falls back to the system default browser when Chrome.app isn't found
+# (e.g. Linux, or pre-`i` machines).
+chrome_open() {
+  local url="$1"
+  local chrome_bin=""
+  if [ -d "/Applications/Google Chrome.app" ]; then
+    chrome_bin="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  elif [ -d "$HOME/Applications/Google Chrome.app" ]; then
+    chrome_bin="$HOME/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  fi
+  if [ -n "$chrome_bin" ]; then
+    "$chrome_bin" \
+      --remote-debugging-port=9222 \
+      --silent-debugger-extension-api \
+      --user-data-dir="$HOME/Library/Application Support/Google/Chrome-Claude" \
+      "$url" >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+    return 0
+  fi
+  if command -v open >/dev/null 2>&1; then
+    open "$url"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url"
+  fi
+}
+
 # --- Y/N prompt (reads from /dev/tty for piped mode) ---
 prompt_yn() {
   # $1 = question, $2 = default (Y or N)

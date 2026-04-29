@@ -1033,7 +1033,7 @@ do_oauth() {
   redirect_enc=$(urlencode "$redirect_uri")
   auth_url="https://accounts.google.com/o/oauth2/auth?client_id=${CLIENT_ID}&redirect_uri=${redirect_enc}&response_type=code&scope=${scope_enc}&access_type=offline&prompt=consent"
 
-  open "$auth_url"
+  chrome_open "$auth_url"
   printf "${C_GRAY}⋯  waiting for browser sign-in${C_RST}"
 
   local rc=1
