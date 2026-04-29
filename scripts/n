@@ -4,12 +4,12 @@
 # the template needs to deploy.
 #
 # Architecture:
-#   - SECTION 1: HTTP server (Perl-backed loopback) — used only for OAuth.
-#     Bash drives it via FIFOs + a synchronous request/response protocol.
+#   - SECTION 1: HTTP server (Perl-backed loopback) — used ONLY to catch
+#     the OAuth callback. Account picking happens in the terminal.
 #   - SECTION 2: Helpers (url coding, json, OAuth refresh, GCP/Firebase REST).
-#   - SECTION 3: HTML templates (browser-side: OAuth + handoff pages).
-#   - SECTION 4: Browser dispatcher — runs OAuth/picker, then hands off.
-#   - SECTION 5: Terminal flow — project name + provisioning.
+#   - SECTION 3: Tiny HTML for the OAuth landing tab.
+#   - SECTION 4: Terminal account chooser + OAuth flow.
+#   - SECTION 5: Terminal project chooser + provisioning.
 #
 # Run after the bootstrap has cloned this repo:
 #   bash ~/.if/staging/scripts/n
@@ -124,12 +124,14 @@ http_send() {
 }
 
 http_stop() {
+  [ -z "${HTTP_PID:-}" ] && return 0
   exec 7<&- 2>/dev/null || true
   exec 8>&- 2>/dev/null || true
   kill "$HTTP_PID" 2>/dev/null || true
   wait "$HTTP_PID" 2>/dev/null || true
   rm -f "$HTTP_IN" "$HTTP_OUT"
   http_log "server stopped"
+  HTTP_PID=""
 }
 
 # =====================================================================
@@ -685,8 +687,8 @@ configure_email_link_auth() {
 }
 
 # Validate a GCP project ID. Collects ALL violated rules into the
-# VALIDATION_ERRORS array — mirrors the browser form's multi-error display
-# (the user sees every rule they're breaking at once, not just the first).
+# VALIDATION_ERRORS array — the user sees every rule they're breaking
+# at once, not just the first.
 VALIDATION_ERRORS=()
 validate_gcp_project_id() {
   local id="$1"
@@ -705,7 +707,9 @@ validate_gcp_project_id() {
   return 0
 }
 
-# Print the terminal equivalent of build_setup_needed_html.
+# Print setup-needed instructions to the terminal. Called when preflight
+# (no_billing) or add_firebase (no_firebase_tos) detects an account that
+# hasn't completed its one-time Firebase Console setup.
 print_setup_needed_terminal() {
   local email="$1" reason="$2"
   echo ""
@@ -916,159 +920,36 @@ provision_all() {
 }
 
 # =====================================================================
-# SECTION 3 — HTML templates
+# SECTION 3 — Tiny HTML for the OAuth landing tab
 # =====================================================================
-
-build_explainer_html() {
-  local auth_url="$1"
-  cat <<HTML
-<!doctype html><html><head><meta charset="utf-8"><title>Sign in to Google</title>
-<style>
- body{font-family:system-ui,sans-serif;max-width:560px;margin:3em auto;padding:0 1.5em;color:#333;line-height:1.55}
- h1{font-size:1.4em;margin-bottom:.4em}
- h2{font-size:.82em;margin-top:1.8em;margin-bottom:.3em;color:#555;letter-spacing:.04em;text-transform:uppercase}
- ul{list-style:none;padding:0;margin:.3em 0}
- li{padding:.3em 0}
- .ok{color:#0a7}.no{color:#b33}
- .actions{margin-top:2em;display:flex;gap:.75em;align-items:center}
- a.btn{padding:.55em 1.1em;border-radius:6px;text-decoration:none;font-weight:500;display:inline-block}
- a.primary{background:#1a73e8;color:#fff}
- a.secondary{color:#666}
- p.small{color:#888;font-size:.9em;margin-top:1.8em}
- a{color:#1a73e8}
-</style></head><body>
-<h1>Sign in to Google</h1>
-<p>The next page will ask you to sign in and approve the following:</p>
-<h2>Will be requested</h2>
-<ul>
-  <li class="ok">✓ See which Google account is yours (email + profile)</li>
-  <li class="ok">✓ Manage Google Cloud resources on your behalf<br><small style="color:#777">(create projects, enable APIs, deploy services — everything the template needs to set up and run your app)</small></li>
-</ul>
-<h2>Will NOT be requested</h2>
-<ul>
-  <li class="no">✗ Gmail, Drive, Calendar, Sheets, or any personal data</li>
-  <li class="no">✗ Access to other Google accounts</li>
-  <li class="no">✗ Any third-party services</li>
-</ul>
-<p class="small">
-You can revoke access any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.
-</p>
-<div class="actions" id="actions">
-  <a class="btn primary" href="$auth_url">Continue</a>
-  <a class="btn secondary" href="#" id="cancel">Cancel</a>
-</div>
-<div id="cancelled" style="display:none">
-  <h1>No worries, we hope to see you back soon!</h1>
-  <p class="small">Feel free to close this browser tab now.</p>
-</div>
-<script>
-document.getElementById('cancel').addEventListener('click', function(e){
-  e.preventDefault();
-  fetch('/?cancelled=1').catch(function(){});
-  document.querySelector('body').innerHTML = document.getElementById('cancelled').innerHTML;
-});
-</script>
-</body></html>
-HTML
-}
-
-build_pick_html() {
-  local items_html="" i
-  for i in "${!existing_emails[@]}"; do
-    items_html+="  <li><a class=\"pick\" href=\"/?pick=$i\">${existing_emails[$i]}</a></li>"$'\n'
-  done
-  items_html+='  <li><a class="pick new" href="/?pick=new">+ new account</a></li>'
-  cat <<HTML
-<!doctype html><html><head><meta charset="utf-8"><title>Which account?</title>
-<style>
- body{font-family:system-ui,sans-serif;max-width:560px;margin:3em auto;padding:0 1.5em;color:#333;line-height:1.55}
- h1{font-size:1.4em;margin-bottom:.4em}
- p{color:#555}
- ul.picker{list-style:none;padding:0;margin:1.2em 0}
- ul.picker li{margin:.4em 0}
- a.pick{display:block;padding:.7em 1em;border:1px solid #ddd;border-radius:6px;color:#333;text-decoration:none}
- a.pick:hover{border-color:#1a73e8;background:#f0f6ff}
- a.pick.new{color:#1a73e8;border-style:dashed}
-</style></head><body>
-<h1>Which account?</h1>
-<p>We'll use this account to create a new project. Which would you like to use?</p>
-<ul class="picker">
-$items_html
-</ul>
-</body></html>
-HTML
-}
+# Everything user-facing happens in the terminal. The browser tab only
+# needs to land somewhere after Google's redirect — these two pages
+# cover success and error.
 
 build_browser_done_html() {
   local email="$1"
   cat <<HTML
-<!doctype html><html><head><meta charset="utf-8"><title>Signed in</title>
-<style>
- body{font-family:system-ui,sans-serif;max-width:560px;margin:3em auto;padding:0 1.5em;color:#333;line-height:1.55}
- h1{font-size:1.4em;margin-bottom:.4em;color:#0a7}
- p.small{color:#888;font-size:.9em;margin-top:1.8em}
-</style></head><body>
+<!doctype html><meta charset=utf-8><title>Signed in</title>
+<style>body{font-family:system-ui,sans-serif;max-width:540px;margin:3em auto;padding:0 1.5em;color:#333;line-height:1.55}h1{color:#0a7;font-size:1.4em}p.s{color:#888;font-size:.9em;margin-top:1.6em}</style>
 <h1>✓ Signed in</h1>
 <p>Signed in as <b>$email</b>. Return to your terminal — we'll continue setup there.</p>
-<p class="small">You can close this tab.</p>
-</body></html>
+<p class=s>You can close this tab.</p>
 HTML
 }
 
-build_setup_needed_html() {
-  local email="$1" reason="$2"
-  local what
-  case "$reason" in
-    no_billing)
-      what="It looks like <b>$email</b> doesn't have a Google Cloud billing account set up yet."
-      ;;
-    no_firebase_tos)
-      what="It looks like <b>$email</b> hasn't accepted the Firebase terms of service yet."
-      ;;
-    *)
-      what="Something's missing from <b>$email</b>'s Google Cloud setup."
-      ;;
-  esac
-  cat <<HTML
-<!doctype html><html><head><meta charset="utf-8"><title>One more setup step</title>
-<style>
- body{font-family:system-ui,sans-serif;max-width:560px;margin:3em auto;padding:0 1.5em;color:#333;line-height:1.55}
- h1{font-size:1.4em;margin-bottom:.4em}
- a.btn{display:inline-block;padding:.6em 1.2em;border-radius:6px;background:#1a73e8;color:#fff;text-decoration:none;font-weight:500;margin:1em 0}
- ol{padding-left:1.2em}
- li{margin:.45em 0}
- code{font-family:ui-monospace,monospace;background:#f4f4f4;padding:.1em .35em;border-radius:3px}
- p.small{color:#888;font-size:.9em;margin-top:1.8em}
-</style></head><body>
-<h1>One more setup step</h1>
-<p>$what</p>
-<p>The fastest fix: open the Firebase Console and run their "create a project" flow once. It walks you through Google's free-trial credits AND the Firebase terms — both gates, one flow.</p>
-<a class="btn" href="https://console.firebase.google.com/" target="_blank">Open Firebase Console</a>
-<ol>
-  <li>Click <b>Create a project</b> (or <b>Add project</b>) if it isn't already open.</li>
-  <li>Use <code>nothing</code> as the project name. We won't use this project — it's just to get the gates accepted.</li>
-  <li>When asked to upgrade to Blaze / accept free-trial credits, accept.</li>
-  <li>Once the project finishes creating, come back to your terminal and re-run <code>bash ~/.if/staging/scripts/n</code>.</li>
-</ol>
-<p class="small">You can close this tab.</p>
-</body></html>
-HTML
-}
-
-build_fatal_html() {
+build_browser_error_html() {
   local msg="$1"
   cat <<HTML
-<!doctype html><html><head><meta charset="utf-8"><title>Error</title>
-<style>body{font-family:system-ui;padding:3em;max-width:36em;margin:auto;color:#333;line-height:1.55}pre{background:#f4f4f4;padding:1em;border-radius:6px;overflow:auto}</style>
-</head><body>
-<h2 style="color:#b33">✗ $msg</h2>
-<p>Check /tmp/if-new.log for details. You can close this tab.</p>
-</body></html>
+<!doctype html><meta charset=utf-8><title>Error</title>
+<style>body{font-family:system-ui,sans-serif;max-width:540px;margin:3em auto;padding:0 1.5em;color:#333;line-height:1.55}h1{color:#b33;font-size:1.4em}p.s{color:#888;font-size:.9em;margin-top:1.6em}</style>
+<h1>✗ $msg</h1>
+<p>Return to your terminal — we'll continue setup there.</p>
+<p class=s>You can close this tab.</p>
 HTML
 }
 
 # =====================================================================
-# SECTION 4 — Browser dispatcher
+# SECTION 4 — Terminal account chooser + OAuth flow
 # =====================================================================
 
 CLIENT_ID="32555940559.apps.googleusercontent.com"
@@ -1091,134 +972,170 @@ if [ -d "$CREDS_DIR" ]; then
   done
 fi
 
-if [ ${#existing_creds[@]} -gt 0 ]; then
-  initial_state="pick_account"
-else
-  initial_state="waiting_auth"
-fi
+# Terminal account chooser. Sets PICKED_CRED to the chosen cred file path,
+# or "" when the user wants a fresh sign-in. Returns immediately with
+# PICKED_CRED="" if there are no existing creds to pick from.
+PICKED_CRED=""
+pick_account_terminal() {
+  PICKED_CRED=""
+  [ ${#existing_creds[@]} -eq 0 ] && return
+  local n choice
+  while true; do
+    echo "Which Google account?"
+    echo ""
+    n=1
+    for e in "${existing_emails[@]}"; do
+      printf "%d. %s\n" "$n" "$e"
+      n=$((n + 1))
+    done
+    printf "%d. + new account\n" "$n"
+    echo ""
+    printf "> "
+    read -r choice </dev/tty || choice=""
+    if [[ ! "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "$n" ]; then
+      printf "${C_RED}✗  pick a number 1-%d${C_RST}\n\n" "$n"
+      continue
+    fi
+    [ "$choice" -eq "$n" ] && return
+    PICKED_CRED="${existing_creds[$((choice - 1))]}"
+    return
+  done
+}
+
+# Run the full browser OAuth flow. On success: sets ACCESS_TOKEN + EMAIL
+# and writes the cred file under ~/.if/creds. On any failure: returns 1
+# with ACCESS_TOKEN unset (caller decides how to surface that).
+do_oauth() {
+  echo ""
+  echo "Opening Google sign-in in your browser. The next page will ask you"
+  echo "to approve the following:"
+  echo ""
+  printf "  ${C_GRN}✓${C_RST} See which Google account is yours (email + profile)\n"
+  printf "  ${C_GRN}✓${C_RST} Manage Google Cloud resources on your behalf\n"
+  printf "    ${C_GRAY}(create projects, enable APIs, deploy services)${C_RST}\n"
+  echo ""
+  echo "It will NOT request:"
+  printf "  ${C_RED}✗${C_RST} Gmail, Drive, Calendar, Sheets, or any personal data\n"
+  printf "  ${C_RED}✗${C_RST} Access to other Google accounts\n"
+  printf "  ${C_RED}✗${C_RST} Any third-party services\n"
+  echo ""
+  printf "${C_GRAY}Revoke any time at https://myaccount.google.com/permissions${C_RST}\n"
+  echo ""
+
+  http_start
+
+  local redirect_uri scope_enc redirect_enc auth_url
+  redirect_uri="http://127.0.0.1:$HTTP_PORT"
+  scope_enc=$(urlencode "$SCOPE")
+  redirect_enc=$(urlencode "$redirect_uri")
+  auth_url="https://accounts.google.com/o/oauth2/auth?client_id=${CLIENT_ID}&redirect_uri=${redirect_enc}&response_type=code&scope=${scope_enc}&access_type=offline&prompt=consent"
+
+  open "$auth_url"
+  printf "${C_GRAY}⋯  waiting for browser sign-in${C_RST}"
+
+  local rc=1
+  while http_recv; do
+    if [ "$REQ_PATH" != "/" ]; then
+      http_send ""
+      continue
+    fi
+    if [[ "$REQ_QUERY" == *error=* ]]; then
+      local err; err=$(query_param "$REQ_QUERY" error)
+      http_send "$(build_browser_error_html "OAuth error: $err")"
+      http_log "OAuth error: $err"
+      printf "\r\033[K"
+      printf "${C_RED}✗  OAuth error: %s${C_RST}\n" "$err"
+      break
+    fi
+    if [[ "$REQ_QUERY" == *code=* ]]; then
+      local code_raw code tokens
+      code_raw=$(query_param "$REQ_QUERY" code)
+      code=$(urldecode "$code_raw")
+
+      if ! tokens=$(curl -fsSL -X POST https://oauth2.googleapis.com/token \
+          --data-urlencode "client_id=$CLIENT_ID" \
+          --data-urlencode "client_secret=$CLIENT_SECRET" \
+          --data-urlencode "code=$code" \
+          --data-urlencode "redirect_uri=$redirect_uri" \
+          --data-urlencode "grant_type=authorization_code" 2>&1); then
+        http_send "$(build_browser_error_html "Token exchange failed")"
+        http_log "token exchange failed: $tokens"
+        printf "\r\033[K"
+        printf "${C_RED}✗  token exchange failed${C_RST}\n"
+        break
+      fi
+      ACCESS_TOKEN=$(printf '%s' "$tokens" | json_extract access_token)
+      if [ -z "$ACCESS_TOKEN" ]; then
+        http_send "$(build_browser_error_html "No access token in response")"
+        printf "\r\033[K"
+        printf "${C_RED}✗  no access token in response${C_RST}\n"
+        break
+      fi
+
+      local userinfo
+      userinfo=$(curl -fsSL -H "Authorization: Bearer $ACCESS_TOKEN" \
+        https://www.googleapis.com/oauth2/v3/userinfo 2>&1) || true
+      EMAIL=$(printf '%s' "$userinfo" | json_extract email)
+      [ -z "$EMAIL" ] && EMAIL="unknown"
+
+      mkdir -p "$CREDS_DIR"
+      chmod 700 "$HOME/.if" "$CREDS_DIR"
+      local cred_path="$CREDS_DIR/${EMAIL}.json"
+      cat > "$cred_path" <<JSON
+{
+  "email": "$EMAIL",
+  "client_id": "$CLIENT_ID",
+  "client_secret": "$CLIENT_SECRET",
+  "tokens": $tokens
+}
+JSON
+      chmod 600 "$cred_path"
+
+      http_send "$(build_browser_done_html "$EMAIL")"
+      printf "\r\033[K"
+      printf "${C_GRN}✓  signed in as %s${C_RST}\n" "$EMAIL"
+      rc=0
+      break
+    fi
+    # Anything else on / — return an empty body and keep listening.
+    http_send ""
+  done
+
+  http_stop
+  return $rc
+}
 
 if ! prompt_yn "Ready to set up your Google cloud project?" "Y"; then
   exit 0
 fi
 echo ""
-echo "Sign in to Google Cloud using the account you set up during install..."
 
-http_start
-trap http_stop EXIT
+# Make sure the perl HTTP server is cleaned up on any exit (ctrl-c, error,
+# etc.). http_start sets HTTP_PID; http_stop clears it, so this is a no-op
+# when the server isn't running.
+trap '[ -n "${HTTP_PID:-}" ] && http_stop' EXIT
 
-REDIRECT_URI="http://127.0.0.1:$HTTP_PORT"
-SCOPE_ENC=$(urlencode "$SCOPE")
-REDIRECT_ENC=$(urlencode "$REDIRECT_URI")
-AUTH_URL="https://accounts.google.com/o/oauth2/auth?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_ENC}&response_type=code&scope=${SCOPE_ENC}&access_type=offline&prompt=consent"
+pick_account_terminal
 
-EXPLAINER_HTML=$(build_explainer_html "$AUTH_URL")
-
-open "http://127.0.0.1:$HTTP_PORT/"
-
-state="$initial_state"
-
-while http_recv; do
-  if [ "$REQ_PATH" != "/" ]; then
-    http_send ""
-    continue
+if [ -n "$PICKED_CRED" ]; then
+  EMAIL=$(json_extract email < "$PICKED_CRED")
+  if [ -z "$EMAIL" ]; then
+    echo "✗ Couldn't read email from $PICKED_CRED"
+    exit 1
   fi
+  printf "${C_GRAY}⋯  refreshing token for %s${C_RST}" "$EMAIL"
+  if refresh_access_token "$PICKED_CRED"; then
+    printf "\r\033[K"
+    printf "${C_GRN}✓  signed in as %s${C_RST}\n" "$EMAIL"
+  else
+    printf "\r\033[K"
+    printf "${C_GRAY}token refresh failed — re-authenticating${C_RST}\n"
+    do_oauth || true
+  fi
+else
+  do_oauth || true
+fi
 
-  case "$state" in
-
-    pick_account)
-      if [[ "$REQ_QUERY" == *pick=* ]]; then
-        picked=$(query_param "$REQ_QUERY" pick)
-        if [ "$picked" = "new" ]; then
-          http_send "$EXPLAINER_HTML"
-          state="waiting_auth"
-        else
-          selected="${existing_creds[$picked]}"
-          EMAIL=$(json_extract email < "$selected")
-          if [ -z "$EMAIL" ]; then
-            http_send "$(build_fatal_html "Couldn't read email from $selected")"
-            break
-          fi
-          if refresh_access_token "$selected"; then
-            if preflight_check; then
-              http_send "$(build_browser_done_html "$EMAIL")"
-              break
-            else
-              http_send "$(build_setup_needed_html "$EMAIL" "$PREFLIGHT_REASON")"
-              break
-            fi
-          else
-            http_send "$EXPLAINER_HTML"
-            state="waiting_auth"
-          fi
-        fi
-      else
-        http_send "$(build_pick_html)"
-      fi
-      ;;
-
-    waiting_auth)
-      if [[ "$REQ_QUERY" == *cancelled=1* ]]; then
-        http_send ""
-        break
-      elif [[ "$REQ_QUERY" == *error=* ]]; then
-        err=$(query_param "$REQ_QUERY" error)
-        http_send "$(build_fatal_html "OAuth error: $err")"
-        http_log "OAuth error: $err"
-        break
-      elif [[ "$REQ_QUERY" == *code=* ]]; then
-        CODE_RAW=$(query_param "$REQ_QUERY" code)
-        CODE=$(urldecode "$CODE_RAW")
-
-        if ! TOKENS=$(curl -fsSL -X POST https://oauth2.googleapis.com/token \
-            --data-urlencode "client_id=$CLIENT_ID" \
-            --data-urlencode "client_secret=$CLIENT_SECRET" \
-            --data-urlencode "code=$CODE" \
-            --data-urlencode "redirect_uri=$REDIRECT_URI" \
-            --data-urlencode "grant_type=authorization_code" 2>&1); then
-          http_send "$(build_fatal_html "Token exchange failed")"
-          http_log "token exchange failed: $TOKENS"
-          break
-        fi
-        ACCESS_TOKEN=$(printf '%s' "$TOKENS" | json_extract access_token)
-        if [ -z "$ACCESS_TOKEN" ]; then
-          http_send "$(build_fatal_html "No access token in response")"
-          break
-        fi
-
-        USERINFO=$(curl -fsSL -H "Authorization: Bearer $ACCESS_TOKEN" \
-          https://www.googleapis.com/oauth2/v3/userinfo 2>&1) || true
-        EMAIL=$(printf '%s' "$USERINFO" | json_extract email)
-        [ -z "$EMAIL" ] && EMAIL="unknown"
-
-        mkdir -p ~/.if/creds
-        chmod 700 ~/.if ~/.if/creds
-        CRED_PATH="$HOME/.if/creds/${EMAIL}.json"
-        cat > "$CRED_PATH" <<JSON
-{
-  "email": "$EMAIL",
-  "client_id": "$CLIENT_ID",
-  "client_secret": "$CLIENT_SECRET",
-  "tokens": $TOKENS
-}
-JSON
-        chmod 600 "$CRED_PATH"
-
-        if preflight_check; then
-          http_send "$(build_browser_done_html "$EMAIL")"
-          break
-        else
-          http_send "$(build_setup_needed_html "$EMAIL" "$PREFLIGHT_REASON")"
-          break
-        fi
-      else
-        http_send "$EXPLAINER_HTML"
-      fi
-      ;;
-
-  esac
-done
-
-http_stop
 trap - EXIT
 
 # Sign-in didn't complete (cancelled, fatal error, etc).
@@ -1229,24 +1146,22 @@ if [ -z "$ACCESS_TOKEN" ] || [ -z "$EMAIL" ]; then
   exit 1
 fi
 
-# Preflight failed in the browser flow (no_billing). Browser already
-# showed the instructions; mirror them in terminal and exit.
-if [ -n "$PREFLIGHT_REASON" ]; then
+# Preflight (open billing account) gates further provisioning. Firebase
+# ToS gets caught later in add_firebase via PREFLIGHT_REASON=no_firebase_tos.
+if ! preflight_check; then
   print_setup_needed_terminal "$EMAIL" "$PREFLIGHT_REASON"
   exit 1
 fi
 
 # =====================================================================
-# SECTION 5 — Terminal flow
+# SECTION 5 — Terminal project chooser + provisioning
 # =====================================================================
 
 echo ""
-echo "Signed in as $EMAIL."
-echo ""
 
-# Prompts the user to pick a new GCP project id, validates with the same
-# rules the browser form used, and creates it. Sets the global PID on
-# success; loops on validation errors, ALREADY_EXISTS, etc.
+# Prompts the user for a new GCP project id, validates against Google's
+# rules, and creates it. Sets the global PID on success; loops on
+# validation errors, ALREADY_EXISTS, etc.
 prompt_create_project() {
   PID=""
   local tried_names=() candidate result joined e

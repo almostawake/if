@@ -733,6 +733,7 @@ _write_zshrc() {
     printf "alias cc='claude --dangerously-skip-permissions'\n"
     printf "alias ccc='claude --dangerously-skip-permissions --continue'\n"
     printf "alias ccr='claude --dangerously-skip-permissions --resume'\n"
+    printf "alias create-project='bash \$HOME/.if/staging/scripts/b'\n"
     printf '%s\n' "$MARKER_END"
   } >> "$zshrc"
 }
