@@ -954,10 +954,13 @@ HTML
 
 CLIENT_ID="32555940559.apps.googleusercontent.com"
 CLIENT_SECRET="ZmssLNjJy2998hD4CTg2ejr2"
-# `firebase` scope alongside cloud-platform: firebase-tools does a literal-
-# string scope check, so without it firebase-tools considers our token
-# invalid and tries to refresh through its own OAuth client (which fails).
-SCOPE="openid email https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/firebase"
+# We use the public gcloud OAuth client. Its registered scopes don't
+# include https://www.googleapis.com/auth/firebase — requesting it
+# returns 403 restricted_client. cloud-platform alone is sufficient for
+# everything this script does via REST (cloudresourcemanager, serviceusage,
+# cloudbilling, firebase.googleapis.com, firestore.googleapis.com,
+# firebasestorage, identitytoolkit) — they all accept cloud-platform.
+SCOPE="openid email https://www.googleapis.com/auth/cloud-platform"
 
 ACCESS_TOKEN=""
 EMAIL=""
