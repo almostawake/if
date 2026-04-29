@@ -1,8 +1,11 @@
 # Ways of Working
 
+This file is the template-app Ways-of-Working — the Svelte/Firebase/Firestore project that ends up at `~/projects/<id>` for end users. Anything about the **install scripts** (`aa/i`, `scripts/i`, `scripts/n`, `scripts/b`, `scripts/l`) lives in `docs/CLAUDE-SCRIPTS.md`, not here.
+
 Read the relevant topic file before working in its area:
 - **docs/CLAUDE-STACK.md** — target tech stack and architecture.
 - **docs/CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
+- **docs/CLAUDE-SCRIPTS.md** — install + new-project scripts (aa↔if relationship, install/n flow, auth model, deploy, VM-debug ntfy topic).
 
 ## Audience
 
