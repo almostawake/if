@@ -824,7 +824,7 @@ _write_zshrc         >> "$INSTALL_LOG" 2>&1
 
 echo ""
 echo ""
-heading "set chrome as the default browser"
+heading "instructions for the next step: making chrome the default browser"
 echo ""
 echo "Next we'll launch chrome. when that happens, it's important to set chrome"
 echo "as the default browser. You can ignore/dismiss alerts and press \"Don't"
@@ -849,7 +849,6 @@ if [ "$OS" = "darwin" ] && [ -d "$HOME/Applications/Chrome with Claude Code.app"
   done
 fi
 
-echo ""
 echo ""
 heading "all done"
 echo ""
