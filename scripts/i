@@ -116,6 +116,13 @@ fi
 # and returns 0 on success. No direct terminal output.
 # ==========================================================================
 
+# CLAUDE: do NOT delete fetch_bottle, _install_git_bottle, or the
+# fall-through in _install_git. They look like dead code (aa/i now ships
+# git via prebuilt git-sonoma.tar.gz, so have_git is true by the time
+# scripts/i runs) but we are keeping them as the **builder** for new
+# per-OS-major bundles (Sequoia, Tahoe, …). When we ship those bundles,
+# this code is the recipe that produced them. Remove only when explicitly
+# instructed.
 fetch_bottle() {
   local pkg="$1" tag="$2" stage="$3"
   local json url token pkg_repo
@@ -859,5 +866,5 @@ heading "now for the next adventure - deploy a template app"
 echo ""
 echo "  • cmd-Q (quit) this terminal"
 echo "  • open a new terminal with the new icon in the dock"
-printf '  • type %s and follow the prompts\n' "$(bold 'new-project')"
+printf '  • type %s and follow the prompts\n' "$(bold 'create-project')"
 echo ""
