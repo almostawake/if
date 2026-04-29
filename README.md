@@ -50,8 +50,19 @@ you can run this again anytime to spin up another project.
 
 ## something went wrong?
 
+### "failed to add firebase to the project"
+
+This means your gmail account hasn't accepted the Firebase terms & conditions yet. Fix:
+
+1. Open [console.firebase.google.com](https://console.firebase.google.com/) signed in as the same gmail you used in the script.
+2. Click **Create a project** (or **Add project**).
+3. Use any name — e.g. `nothing-yet`. We won't use this project, it's just to trigger ToS acceptance.
+4. Click through the prompts. Accept the free trial / Blaze upgrade if asked.
+5. Once the project finishes creating, return to your terminal and run `create-project` again.
+
+### other issues
+
 - install issues: `tail -100 /tmp/if-install.log`
-- new-project issues: `tail -100 /tmp/if-new.log`
 - email [andrew@almostawake.com](mailto:andrew@almostawake.com) with what you saw
 
 ## what lives in this repo
