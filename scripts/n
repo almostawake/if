@@ -828,9 +828,12 @@ provision_all() {
       echo ""
       if [ "$fn" = "_prov_add_firebase" ]; then
         echo "Failed to add firebase to the project. This most likely means"
-        echo "you haven't yet accepted the Firebase terms & conditions. See"
-        echo "the readme for instructions."
+        echo "you haven't yet accepted the Firebase terms & conditions."
         echo ""
+        printf "Press any key to open the readme..."
+        read -n 1 -s -r </dev/tty || true
+        printf "\r\033[K"
+        open "$SCRIPT_DIR/../README.md" 2>/dev/null || true
       fi
       return 1
     fi
