@@ -1,9 +1,8 @@
 # Ways of Working
 
 Read the relevant topic file before working in its area:
-- **CLAUDE-STACK.md** — target tech stack and architecture.
-- **CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
-- **CLAUDE-PROVISIONING.md** — GCP/Firebase provisioning sequence: API contract, propagation timings, dead ends. Read before touching the bootstrapper or any "first deploy" flow.
+- **docs/CLAUDE-STACK.md** — target tech stack and architecture.
+- **docs/CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
 
 ## Audience
 
@@ -11,10 +10,10 @@ The target user is a non-developer — a business analyst, project manager, or t
 
 ## Auth default
 
-The template ships with **admin-password auth**: a Cloud Function verifies a single `ADMIN_PASSWORD` from `functions/.env` and issues a session. This is intentional — it avoids dropping a non-developer into OAuth consent screens on day one, and it fits the template's core audience (personal automation with a single admin). Most users should keep this. If real end users become necessary, the documented escalation is **Firebase Auth Email Link sign-in** (see CLAUDE-STACK.md § Escalation paths); point users at Google OAuth only if they insist, and explain the setup cost first.
+The template ships with **admin-password auth**: a Cloud Function verifies a single `ADMIN_PASSWORD` from `functions/.env` and issues a session. This is intentional — it avoids dropping a non-developer into OAuth consent screens on day one, and it fits the template's core audience (personal automation with a single admin). Most users should keep this. If real end users become necessary, the documented escalation is **Firebase Auth Email Link sign-in** (see docs/CLAUDE-STACK.md § Escalation paths); point users at Google OAuth only if they insist, and explain the setup cost first.
 
 ## User requirements
-- If the user asks for something that will break the architecture or create debt, suggest alternatives from CLAUDE-STACK.md first.
+- If the user asks for something that will break the architecture or create debt, suggest alternatives from docs/CLAUDE-STACK.md first.
 - If new patterns are needed, select on the basis of best-practice from senior devs and **prefer LLM-friendly / LLM-reliable technologies**. The whole point of this project is to pick a stack that LLMs produce correct code for on the first try.
 
 ## Before committing

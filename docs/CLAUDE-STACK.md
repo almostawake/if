@@ -1,6 +1,6 @@
 # Target Tech Stack
 
-The tech stack and layer patterns for this project. See **CLAUDE.md** for ways of working, and **CLAUDE-SVELTE.md** for Svelte 5 specifics (read this before writing any Svelte code — LLMs habitually drift to Svelte 4 syntax).
+The tech stack and layer patterns for this project. See **../CLAUDE.md** for ways of working, and **CLAUDE-SVELTE.md** for Svelte 5 specifics (read this before writing any Svelte code — LLMs habitually drift to Svelte 4 syntax).
 
 The stack is chosen to maximise **first-shot correctness from LLMs**. That means: conventions that live in the repo rather than a library's docs, APIs that can be grepped, and training-corpus-heavy tools.
 
@@ -26,7 +26,7 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | Scraping (protected sites) | **Puppeteer + `puppeteer-extra-plugin-stealth`** on Cloud Functions | Bullet-proof against the 99% of sites guarded by CF-style bot detection. Cloud Run is the documented escalation for the 1% that need heavier setup. |
 | Email (outbound) | **Gmail API**, sending from the user's own Gmail account | Avoids Resend/SendGrid account setup. Provisioned during first-run setup. |
 | Notifications (push to phone) | **Ntfy** (`ntfy.sh`) | Zero-account, free, one `fetch` call. Topic lives in `functions/.env`. |
-| Local dev | **Firebase emulator suite** | Free local emulation is a hard requirement — see CLAUDE.md. |
+| Local dev | **Firebase emulator suite** | Free local emulation is a hard requirement — see ../CLAUDE.md. |
 | Lint/format | **ESLint + Prettier + svelte-check** | `npm run check` = `svelte-check && eslint .` |
 
 ---
@@ -42,8 +42,6 @@ This repo is a **template**, not an app. The rules:
   ```ts
   // DEMO — delete (demo)/ route group + functions/src/watchdog/ when starting real work. Not a feature.
   ```
-
-See **CLAUDE-PROBE.md** for the probe's narrative, capability map, default config, and deletion instructions.
 
 ---
 
@@ -211,4 +209,4 @@ Things the template deliberately does **not** ship, but documents as "if you nee
 | Mobile apps | **Expo** | Documented but not wired. App-store approval is a saga; set expectations. |
 | Realtime / multiplayer | **Firestore `onSnapshot`** | Already covered by the stack — no additional service needed. Listed here so nobody reaches for PartyKit or Socket.io. |
 
-If the user asks for something not in the stack or the escalation list, follow CLAUDE.md's rule: suggest the closest alternative that keeps the stack small and LLM-friendly, and only add a new technology if there's a concrete requirement the stack can't meet.
+If the user asks for something not in the stack or the escalation list, follow ../CLAUDE.md's rule: suggest the closest alternative that keeps the stack small and LLM-friendly, and only add a new technology if there's a concrete requirement the stack can't meet.
