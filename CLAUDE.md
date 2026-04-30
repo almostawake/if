@@ -1,13 +1,18 @@
+# Purpose
+
+This firebase/gcp project was set up from a template at github.com/almostawake/if 
+Its primary purpose is to fast track small automation solutions for non-developers
+
+The project is also home for the main scripts used for one-time osx install of dev apps like git/gh/chrome and per-project setup (including provisioning and deployment).
+These live in scripts/ refer to the md there if you're asked to edit ANY scripts
+
 # Ways of Working
 
-This file is the template-app Ways-of-Working — the Svelte/Firebase/Firestore project that ends up at `~/projects/<id>` for end users. Anything about the **install scripts** (`aa/i`, `scripts/i`, `scripts/n`, `scripts/b`, `scripts/l`) lives in `docs/CLAUDE-SCRIPTS.md`, not here.
-
 Read the relevant topic file before working in its area:
-- **docs/CLAUDE-STACK.md** — target tech stack and architecture.
+- **docs/CLAUDE-STACK.md** — target tech stack and architecture, stick to these technologies, they are all pre-provisioned
 - **docs/CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
-- **docs/CLAUDE-SCRIPTS.md** — install + new-project scripts (aa↔if relationship, install/n flow, auth model, deploy, VM-debug ntfy topic).
 
-## Audience
+## Non-technical Audience
 
 The target user is a non-developer — a business analyst, project manager, or team lead building small personal-automation tools with Claude Code. Assume they do not know OAuth, serverless, or Firestore modelling; keep jargon to a minimum and offer to explain. When they ask for specific technology, clarify the functional requirement first rather than taking the technical direction at face value.
 

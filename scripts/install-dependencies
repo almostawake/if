@@ -1,9 +1,11 @@
 #!/bin/bash
 #
-# if (impatient futurist) installer (minimal — dep install only)
+# install-dependencies — install local-to-user copies of node, java,
+# claude code, gh, etc., set up "Chrome with Claude Code", and write
+# the marker block in ~/.zshrc.
 #
 # Run via the public bootstrap:
-#   curl -fsSL https://almostawake.com/install.sh | bash
+#   curl -fsSL https://almostawake.com/i.sh | bash
 # which clones this repo to ~/.if/staging and execs this script.
 #
 # CLAUDE EDIT NOTICE: Don't bump ZSHRC_VERSION in zshrc-remote for
@@ -15,7 +17,7 @@ set -e
 
 # --- Load shared helpers (colors, prompts, OS detection) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SCRIPT_DIR/l"
+. "$SCRIPT_DIR/lib"
 
 # --- Constants ---
 NODE_VERSION="22.11.0"
@@ -73,8 +75,9 @@ have_claude=false
 command -v claude >/dev/null 2>&1 && have_claude=true
 
 have_git=false
-# Check ~/.if/git/bin/git directly first — i.sh (the bootstrap) installs
-# there but doesn't update PATH, so `command -v git` misses it on fresh
+# Check ~/.if/git/bin/git directly first — aa/i (the bootstrap, served
+# as i.sh) installs there but doesn't update PATH, so `command -v git`
+# misses it on fresh
 # shells. The wrapper-presence sentinel (git.real) ensures we don't
 # treat a half-broken pre-wrapper install as healthy.
 if [ -x "$IF_HOME/git/bin/git" ] && [ -x "$IF_HOME/git/bin/git.real" ]; then
@@ -119,7 +122,7 @@ fi
 # CLAUDE: do NOT delete fetch_bottle, _install_git_bottle, or the
 # fall-through in _install_git. They look like dead code (aa/i now ships
 # git via prebuilt git-sonoma.tar.gz, so have_git is true by the time
-# scripts/i runs) but we are keeping them as the **builder** for new
+# scripts/install-dependencies runs) but we are keeping them as the **builder** for new
 # per-OS-major bundles (Sequoia, Tahoe, …). When we ship those bundles,
 # this code is the recipe that produced them. Remove only when explicitly
 # instructed.
@@ -213,7 +216,7 @@ _install_git_bottle() {
   cp "$stage/brotli/"*"/lib/libbrotlicommon.1.dylib"         "$IF_HOME/git/lib/"
   cp "$stage/zstd/"*"/lib/libzstd.1.dylib"                   "$IF_HOME/git/lib/"
   rm -rf "$stage"
-  # See i.sh for the full reasoning. Wrapper re-exports env that gets
+  # See aa/i for the full reasoning. Wrapper re-exports env that gets
   # stripped by dyld when hardened callers (gh, codesigned shells) exec
   # git: DYLD_LIBRARY_PATH (override leaf-name lookup), GIT_EXEC_PATH
   # (libexec/git-core), SSL_CERT_FILE / CURL_CA_BUNDLE (CA bundle —
@@ -733,7 +736,7 @@ _write_zshrc() {
     printf "alias cc='claude --dangerously-skip-permissions'\n"
     printf "alias ccc='claude --dangerously-skip-permissions --continue'\n"
     printf "alias ccr='claude --dangerously-skip-permissions --resume'\n"
-    printf "alias create-project='bash \$HOME/.if/staging/scripts/b'\n"
+    printf "alias setup-project='bash \$HOME/.if/staging/scripts/setup-project-bootstrap'\n"
     printf '%s\n' "$MARKER_END"
   } >> "$zshrc"
 }
@@ -867,5 +870,5 @@ heading "now for the next adventure - deploy a template app"
 echo ""
 echo "  • cmd-Q (quit) this terminal"
 echo "  • open a new terminal with the new icon in the dock"
-printf '  • type %s and follow the prompts\n' "$(bold 'create-project')"
+printf '  • type %s and follow the prompts\n' "$(bold 'setup-project')"
 echo ""

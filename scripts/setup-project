@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# n — create a new GCP/Firebase project and provision everything
-# the template needs to deploy.
+# setup-project — create a new GCP/Firebase project and provision
+# everything the template needs to deploy.
 #
 # Architecture:
 #   - SECTION 1: HTTP server (Perl-backed loopback) — used ONLY to catch
@@ -12,16 +12,28 @@
 #   - SECTION 5: Terminal project chooser + provisioning.
 #
 # Run after the bootstrap has cloned this repo:
-#   bash ~/.if/staging/scripts/n
+#   bash ~/.if/staging/scripts/setup-project
 #
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$SCRIPT_DIR/l"
+. "$SCRIPT_DIR/lib"
 
 # =====================================================================
 # SECTION 1 — HTTP server (Perl-backed)
 # =====================================================================
+
+HTTP_LOG="${HTTP_LOG:-/tmp/if-new.log}"
+
+http_log() {
+  printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >> "$HTTP_LOG"
+}
+
+# Truncate a body for log readability — collapse newlines, cap length.
+# Generous cap (1k) so we capture full Google error structures.
+log_trunc() {
+  printf '%s' "$1" | tr '\n' ' ' | cut -c1-1000
+}
 
 http_pick_port() {
   local p
@@ -79,13 +91,15 @@ while (my $client = $sock->accept) {
 '
 
 http_start() {
+  : > "$HTTP_LOG"
   http_pick_port
   HTTP_IN=$(mktemp -u);  mkfifo "$HTTP_IN"
   HTTP_OUT=$(mktemp -u); mkfifo "$HTTP_OUT"
   exec 8<>"$HTTP_IN"
   exec 7<>"$HTTP_OUT"
-  PERL_PORT="$HTTP_PORT" perl -e "$HTTP_PERL_SERVER" < "$HTTP_IN" > "$HTTP_OUT" 2>/dev/null &
+  PERL_PORT="$HTTP_PORT" perl -e "$HTTP_PERL_SERVER" < "$HTTP_IN" > "$HTTP_OUT" 2>> "$HTTP_LOG" &
   HTTP_PID=$!
+  http_log "server pid=$HTTP_PID port=$HTTP_PORT"
   sleep 0.3
 }
 
@@ -97,6 +111,7 @@ http_recv() {
   else
     REQ_QUERY=""
   fi
+  http_log "recv $REQ_METHOD $REQ_PATH_QUERY"
 }
 
 http_send() {
@@ -105,6 +120,7 @@ http_send() {
   bytes=$(printf '%s' "$body" | wc -c | tr -d ' ')
   printf '%d\n' "$bytes" >&8
   printf '%s' "$body" >&8
+  http_log "send $bytes bytes"
 }
 
 http_stop() {
@@ -114,6 +130,7 @@ http_stop() {
   kill "$HTTP_PID" 2>/dev/null || true
   wait "$HTTP_PID" 2>/dev/null || true
   rm -f "$HTTP_IN" "$HTTP_OUT"
+  http_log "server stopped"
   HTTP_PID=""
 }
 
@@ -164,6 +181,7 @@ list_projects() {
   if ! resp=$(curl -fsSL \
       -H "Authorization: Bearer $ACCESS_TOKEN" \
       "https://cloudresourcemanager.googleapis.com/v3/projects:search?query=state:ACTIVE&pageSize=50" 2>&1); then
+    http_log "list_projects: failed: $resp"
     return 1
   fi
 
@@ -173,11 +191,12 @@ list_projects() {
     for my $p (@{$j->{projects} // []}) {
       print $p->{projectId}, "\n";
     }
-  ') || return 1
+  ') || { http_log "list_projects: parse failed"; return 1; }
 
   while IFS= read -r line; do
     [ -n "$line" ] && EXISTING_PIDS+=("$line")
   done <<< "$pids"
+  http_log "list_projects: ${#EXISTING_PIDS[@]} active project(s) found"
   return 0
 }
 
@@ -201,11 +220,12 @@ refresh_access_token() {
       --data-urlencode "client_secret=$csec" \
       --data-urlencode "refresh_token=$old_refresh" \
       --data-urlencode "grant_type=refresh_token" 2>&1); then
+    http_log "refresh_access_token: curl failed for $email: $new_tokens"
     return 1
   fi
 
   new_access=$(printf '%s' "$new_tokens" | json_extract access_token)
-  [ -z "$new_access" ] && return 1
+  [ -z "$new_access" ] && { http_log "refresh_access_token: no access_token in response for $email"; return 1; }
 
   if ! NEW_TOKENS="$new_tokens" OLD_REFRESH="$old_refresh" \
        EMAIL_X="$email" CID="$cid" CSEC="$csec" \
@@ -221,6 +241,7 @@ refresh_access_token() {
          print JSON::PP->new->pretty->canonical->encode($out);
        ' > "$cred_file.tmp"; then
     rm -f "$cred_file.tmp"
+    http_log "refresh_access_token: perl JSON merge failed for $email"
     return 1
   fi
   mv "$cred_file.tmp" "$cred_file"
@@ -241,10 +262,12 @@ preflight_check() {
   if ! resp=$(curl -fsSL -H "Authorization: Bearer $ACCESS_TOKEN" \
       "https://cloudbilling.googleapis.com/v1/billingAccounts" 2>&1); then
     PREFLIGHT_REASON="billing_check_failed"
+    http_log "preflight: billing list failed: $resp"
     return 1
   fi
   if ! printf '%s' "$resp" | grep -q '"open"[[:space:]]*:[[:space:]]*true'; then
     PREFLIGHT_REASON="no_billing"
+    http_log "preflight: no open billing account"
     return 1
   fi
   return 0
@@ -259,23 +282,29 @@ wait_for_op() {
   if [ -n "${X_GOOG_USER_PROJECT:-}" ]; then
     hdr=(-H "X-Goog-User-Project: $X_GOOG_USER_PROJECT")
   fi
+  http_log "wait_for_op start: $url (timeout=${timeout}s, X-Goog-User-Project=${X_GOOG_USER_PROJECT:-<none>})"
   for i in $(seq 1 "$timeout"); do
     # Capture body and HTTP code separately so silent 4xx/5xx don't read as "still pending".
     local tmp; tmp=$(mktemp)
     code=$(curl -s -o "$tmp" -w "%{http_code}" \
       -H "Authorization: Bearer $ACCESS_TOKEN" "${hdr[@]}" "$url")
     resp=$(cat "$tmp"); rm -f "$tmp"
+    http_log "  poll #$i HTTP $code: $(log_trunc "$resp")"
     if [ "$code" != "200" ]; then
+      http_log "wait_for_op aborting: non-200 status from poll"
       return 1
     fi
     if printf '%s' "$resp" | grep -q '"done"[[:space:]]*:[[:space:]]*true'; then
       if printf '%s' "$resp" | grep -q '"error"'; then
+        http_log "wait_for_op error from $url"
         return 1
       fi
+      http_log "wait_for_op done after $i polls"
       return 0
     fi
     sleep 1
   done
+  http_log "wait_for_op timeout after ${timeout}s: $url last_resp: $(log_trunc "$resp")"
   return 1
 }
 
@@ -292,6 +321,7 @@ create_project() {
     -d "{\"projectId\":\"$pid\",\"displayName\":\"$pid\"}" \
     "https://cloudresourcemanager.googleapis.com/v3/projects")
   local body; body=$(cat "$tmp"); rm -f "$tmp"
+  http_log "create_project $pid → HTTP $code"
 
   if [ "$code" = "409" ] || printf '%s' "$body" | grep -qi 'already.*exists\|ALREADY_EXISTS'; then
     printf '%s' "taken"; return
@@ -328,11 +358,13 @@ enable_api() {
   local hdr=(-H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json")
   [ "$first" != "1" ] && hdr+=(-H "X-Goog-User-Project: $pid")
 
+  http_log "enable_api start: pid=$pid api=$api first=$first"
   local tmp; tmp=$(mktemp)
   local code
   code=$(curl -s -o "$tmp" -w "%{http_code}" -X POST "${hdr[@]}" \
     "https://serviceusage.googleapis.com/v1/projects/$pid/services/$api:enable")
   local body; body=$(cat "$tmp"); rm -f "$tmp"
+  http_log "enable_api $api → HTTP $code body: $(log_trunc "$body")"
 
   if [ "$code" != "200" ]; then
     return 1
@@ -341,9 +373,11 @@ enable_api() {
   # done:true right in the response body — that's NOT a real op, polling
   # it 400s with "Invalid operation id". Treat done:true as success.
   if printf '%s' "$body" | grep -q '"done"[[:space:]]*:[[:space:]]*true'; then
+    http_log "enable_api $api: completed synchronously (already enabled)"
     return 0
   fi
   local op_name; op_name=$(op_name_from "$body")
+  http_log "enable_api $api op_name='$op_name'"
   if [ -n "$op_name" ]; then
     # Chicken-and-egg: on a fresh project, X-Goog-User-Project on the LRO
     # poll silently 403s. Drop the header for first-enable polls.
@@ -352,6 +386,8 @@ enable_api() {
     else
       X_GOOG_USER_PROJECT="$pid" wait_for_op "https://serviceusage.googleapis.com/v1/$op_name" 120
     fi
+  else
+    http_log "enable_api $api: no op_name; treating POST 200 as success"
   fi
 }
 
@@ -361,12 +397,15 @@ enable_api() {
 # (Cloud Build / Run / Artifact Registry / etc) can be enabled. Idempotent.
 link_billing() {
   local pid="$1"
+  http_log "link_billing start: pid=$pid"
 
   local cur_resp
   cur_resp=$(curl -s \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     "https://cloudbilling.googleapis.com/v1/projects/$pid/billingInfo")
+  http_log "link_billing $pid current: $(log_trunc "$cur_resp")"
   if printf '%s' "$cur_resp" | grep -q '"billingEnabled"[[:space:]]*:[[:space:]]*true'; then
+    http_log "link_billing $pid: already linked, skipping"
     return 0
   fi
 
@@ -374,6 +413,7 @@ link_billing() {
   accounts_resp=$(curl -s \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     "https://cloudbilling.googleapis.com/v1/billingAccounts")
+  http_log "link_billing $pid accounts: $(log_trunc "$accounts_resp")"
   local account_name
   account_name=$(ACCOUNTS="$accounts_resp" perl -MJSON::PP -e '
     my $j = decode_json($ENV{ACCOUNTS});
@@ -382,8 +422,10 @@ link_billing() {
     }
   ')
   if [ -z "$account_name" ]; then
+    http_log "link_billing $pid: no open billing account found"
     return 1
   fi
+  http_log "link_billing $pid: linking $account_name"
 
   local tmp; tmp=$(mktemp)
   local code
@@ -393,25 +435,31 @@ link_billing() {
     -d "{\"billingAccountName\":\"$account_name\"}" \
     "https://cloudbilling.googleapis.com/v1/projects/$pid/billingInfo")
   local body; body=$(cat "$tmp"); rm -f "$tmp"
+  http_log "link_billing $pid PUT → HTTP $code body: $(log_trunc "$body")"
   if [ "$code" != "200" ]; then
     return 1
   fi
 }
 
-# Convert a GCP project to a Firebase project. The most common failure
-# is "Firebase ToS not yet accepted" — provision_all surfaces a specific
-# message for any failure here, so we don't disambiguate further.
+# Convert a GCP project to a Firebase project. Sets PREFLIGHT_REASON to
+# "no_firebase_tos" if the call fails because the user hasn't accepted
+# the Firebase ToS yet (structured 400 response).
 add_firebase() {
   local pid="$1"
 
+  http_log "add_firebase start: pid=$pid"
   # Already a Firebase project? Skip. (Idempotency: a GET on the project
   # returns 200 once it's been added to Firebase, 404 otherwise.)
+  local check_tmp; check_tmp=$(mktemp)
   local check_code
-  check_code=$(curl -s -o /dev/null -w "%{http_code}" \
+  check_code=$(curl -s -o "$check_tmp" -w "%{http_code}" \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     -H "X-Goog-User-Project: $pid" \
     "https://firebase.googleapis.com/v1beta1/projects/$pid")
+  local check_body; check_body=$(cat "$check_tmp"); rm -f "$check_tmp"
+  http_log "add_firebase $pid skip-check → HTTP $check_code body: $(log_trunc "$check_body")"
   if [ "$check_code" = "200" ]; then
+    http_log "add_firebase $pid: already Firebase, skipping"
     return 0
   fi
 
@@ -424,11 +472,17 @@ add_firebase() {
     -d '{}' \
     "https://firebase.googleapis.com/v1beta1/projects/$pid:addFirebase")
   local body; body=$(cat "$tmp"); rm -f "$tmp"
+  http_log "add_firebase $pid → HTTP $code body: $(log_trunc "$body")"
 
+  if [ "$code" = "400" ] && printf '%s' "$body" | grep -qi 'terms.of.service\|console\.developers\.google\.com/terms'; then
+    PREFLIGHT_REASON="no_firebase_tos"
+    return 1
+  fi
   if [ "$code" != "200" ]; then
     return 1
   fi
   local op_name; op_name=$(op_name_from "$body")
+  http_log "add_firebase $pid op_name='$op_name'"
   [ -z "$op_name" ] && return 1
   X_GOOG_USER_PROJECT="$pid" wait_for_op "https://firebase.googleapis.com/v1beta1/$op_name" 120
 }
@@ -439,13 +493,16 @@ add_firebase() {
 create_web_app() {
   local pid="$1"
 
+  http_log "create_web_app start: pid=$pid"
   # Already has a web app? Skip. (List returns {"apps":[...]} when any exist.)
   local list_resp
   list_resp=$(curl -s \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     -H "X-Goog-User-Project: $pid" \
     "https://firebase.googleapis.com/v1beta1/projects/$pid/webApps")
+  http_log "create_web_app $pid skip-check list: $(log_trunc "$list_resp")"
   if printf '%s' "$list_resp" | grep -q '"appId"'; then
+    http_log "create_web_app $pid: web app exists, skipping"
     return 0
   fi
 
@@ -458,10 +515,12 @@ create_web_app() {
     -d '{"displayName":"web"}' \
     "https://firebase.googleapis.com/v1beta1/projects/$pid/webApps")
   local body; body=$(cat "$tmp"); rm -f "$tmp"
+  http_log "create_web_app $pid → HTTP $code body: $(log_trunc "$body")"
   if [ "$code" != "200" ]; then
     return 1
   fi
   local op_name; op_name=$(op_name_from "$body")
+  http_log "create_web_app $pid op_name='$op_name'"
   [ -z "$op_name" ] && return 1
   X_GOOG_USER_PROJECT="$pid" wait_for_op "https://firebase.googleapis.com/v1beta1/$op_name" 120
 }
@@ -470,6 +529,7 @@ create_web_app() {
 create_firestore() {
   local pid="$1"
 
+  http_log "create_firestore start: pid=$pid"
   # Default database already exists? Skip. (GET returns 200 if so, 404 otherwise.)
   local check_tmp; check_tmp=$(mktemp)
   local check_code
@@ -478,7 +538,9 @@ create_firestore() {
     -H "X-Goog-User-Project: $pid" \
     "https://firestore.googleapis.com/v1/projects/$pid/databases/(default)")
   local check_body; check_body=$(cat "$check_tmp"); rm -f "$check_tmp"
+  http_log "create_firestore $pid skip-check → HTTP $check_code body: $(log_trunc "$check_body")"
   if [ "$check_code" = "200" ]; then
+    http_log "create_firestore $pid: (default) exists, skipping"
     return 0
   fi
 
@@ -491,10 +553,12 @@ create_firestore() {
     -d '{"locationId":"australia-southeast1","type":"FIRESTORE_NATIVE"}' \
     "https://firestore.googleapis.com/v1/projects/$pid/databases?databaseId=(default)")
   local body; body=$(cat "$tmp"); rm -f "$tmp"
+  http_log "create_firestore $pid → HTTP $code body: $(log_trunc "$body")"
   if [ "$code" != "200" ]; then
     return 1
   fi
   local op_name; op_name=$(op_name_from "$body")
+  http_log "create_firestore $pid op_name='$op_name'"
   [ -z "$op_name" ] && return 1
   X_GOOG_USER_PROJECT="$pid" wait_for_op "https://firestore.googleapis.com/v1/$op_name" 180
 }
@@ -503,6 +567,7 @@ create_firestore() {
 create_storage_bucket() {
   local pid="$1"
 
+  http_log "create_storage_bucket start: pid=$pid"
   # Default bucket already exists? Skip. (List returns a non-empty buckets[]
   # array when any are linked to this project.)
   local list_resp
@@ -510,7 +575,9 @@ create_storage_bucket() {
     -H "Authorization: Bearer $ACCESS_TOKEN" \
     -H "X-Goog-User-Project: $pid" \
     "https://firebasestorage.googleapis.com/v1beta/projects/$pid/buckets")
+  http_log "create_storage_bucket $pid skip-check list: $(log_trunc "$list_resp")"
   if printf '%s' "$list_resp" | grep -q '"bucket"'; then
+    http_log "create_storage_bucket $pid: bucket exists, skipping"
     return 0
   fi
 
@@ -523,11 +590,13 @@ create_storage_bucket() {
     -d '{"location":"australia-southeast1"}' \
     "https://firebasestorage.googleapis.com/v1beta/projects/$pid/defaultBucket")
   local body; body=$(cat "$tmp"); rm -f "$tmp"
+  http_log "create_storage_bucket $pid → HTTP $code body: $(log_trunc "$body")"
   if [ "$code" != "200" ]; then
     return 1
   fi
   # Some endpoints return an LRO; poll only if a real op name came back.
   local op_name; op_name=$(op_name_from "$body")
+  http_log "create_storage_bucket $pid op_name='$op_name'"
   if [ -n "$op_name" ] && [[ "$op_name" == *operations/* ]]; then
     X_GOOG_USER_PROJECT="$pid" wait_for_op "https://firebasestorage.googleapis.com/v1beta/$op_name" 120
   fi
@@ -538,6 +607,7 @@ create_storage_bucket() {
 # local dev (projects created after 2025-04-28 don't include it by default).
 configure_email_link_auth() {
   local pid="$1"
+  http_log "configure_email_link_auth start: pid=$pid"
 
   # The Identity Toolkit Config resource doesn't exist until the first PATCH —
   # so GET can return 404 even on a project where the API is enabled.
@@ -549,6 +619,7 @@ configure_email_link_auth() {
     -H "X-Goog-User-Project: $pid" \
     "https://identitytoolkit.googleapis.com/admin/v2/projects/$pid/config")
   cur=$(cat "$cur_tmp"); rm -f "$cur_tmp"
+  http_log "configure_email_link_auth $pid GET → HTTP $cur_code body: $(log_trunc "$cur")"
 
   # If config doesn't exist (fresh project), initializeAuth creates it.
   # PATCH alone won't — it returns CONFIGURATION_NOT_FOUND. initializeAuth
@@ -556,6 +627,7 @@ configure_email_link_auth() {
   # which is more than enough for personal-automation use. Email-link sign-in
   # works the same as on plain Firebase Auth.
   if [ "$cur_code" = "404" ]; then
+    http_log "configure_email_link_auth $pid: initializing Identity Platform"
     local init_tmp; init_tmp=$(mktemp)
     local init_code init_body
     init_code=$(curl -s -o "$init_tmp" -w "%{http_code}" -X POST \
@@ -565,6 +637,7 @@ configure_email_link_auth() {
       -d '{}' \
       "https://identitytoolkit.googleapis.com/v2/projects/$pid/identityPlatform:initializeAuth")
     init_body=$(cat "$init_tmp"); rm -f "$init_tmp"
+    http_log "configure_email_link_auth $pid initializeAuth → HTTP $init_code body: $(log_trunc "$init_body")"
     if [ "$init_code" != "200" ]; then
       return 1
     fi
@@ -576,10 +649,12 @@ configure_email_link_auth() {
       -H "X-Goog-User-Project: $pid" \
       "https://identitytoolkit.googleapis.com/admin/v2/projects/$pid/config")
     cur=$(cat "$cur_tmp"); rm -f "$cur_tmp"
+    http_log "configure_email_link_auth $pid GET (post-init) → HTTP $cur_code body: $(log_trunc "$cur")"
     if [ "$cur_code" != "200" ]; then
       return 1
     fi
   elif [ "$cur_code" != "200" ]; then
+    http_log "configure_email_link_auth: unexpected GET status $cur_code"
     return 1
   fi
 
@@ -591,7 +666,7 @@ configure_email_link_auth() {
     my @d = @{$j->{authorizedDomains} // []};
     push @d, "localhost" unless grep { $_ eq "localhost" } @d;
     print encode_json(\@d);
-  ') || return 1
+  ') || { http_log "configure_email_link_auth: domain merge failed"; return 1; }
 
   local body
   body=$(printf '{"signIn":{"email":{"enabled":true,"passwordRequired":false}},"authorizedDomains":%s}' "$domains_json")
@@ -605,6 +680,7 @@ configure_email_link_auth() {
     -d "$body" \
     "https://identitytoolkit.googleapis.com/admin/v2/projects/$pid/config?updateMask=signIn.email,authorizedDomains")
   local resp; resp=$(cat "$tmp"); rm -f "$tmp"
+  http_log "configure_email_link_auth $pid → HTTP $code body: $(log_trunc "$resp")"
   if [ "$code" != "200" ]; then
     return 1
   fi
@@ -638,6 +714,14 @@ print_setup_needed_terminal() {
   local email="$1" reason="$2"
   echo ""
   case "$reason" in
+    no_firebase_tos)
+      echo "✗ Firebase Terms of Service not accepted yet for $email."
+      echo ""
+      echo "  Fastest fix: open Firebase Console and start their"
+      echo "  'create a project' flow once. It bundles ToS acceptance."
+      echo ""
+      echo "  https://console.firebase.google.com/"
+      ;;
     no_billing)
       echo "✗ No billing account set up yet for $email."
       echo ""
@@ -656,8 +740,8 @@ print_setup_needed_terminal() {
 }
 
 # Provisioning items, paired in lockstep with PROV_FNS — same shape as
-# scripts/i's ITEMS / INSTALL_FNS so the row-update mechanism is
-# identical (○ pending → ⋯ running → ✓ done, in place).
+# scripts/install-dependencies's ITEMS / INSTALL_FNS so the row-update
+# mechanism is identical (○ pending → ⋯ running → ✓ done, in place).
 #
 # Three label arrays mirror state-appropriate phrasing:
 #   pending  "enable firebase api"        (infinitive — "to do")
@@ -967,6 +1051,7 @@ do_oauth() {
     if [[ "$REQ_QUERY" == *error=* ]]; then
       local err; err=$(query_param "$REQ_QUERY" error)
       http_send "$(build_browser_error_html "OAuth error: $err")"
+      http_log "OAuth error: $err"
       printf "\r\033[K"
       printf "${C_RED}✗  OAuth error: %s${C_RST}\n" "$err"
       break
@@ -983,6 +1068,7 @@ do_oauth() {
           --data-urlencode "redirect_uri=$redirect_uri" \
           --data-urlencode "grant_type=authorization_code" 2>&1); then
         http_send "$(build_browser_error_html "Token exchange failed")"
+        http_log "token exchange failed: $tokens"
         printf "\r\033[K"
         printf "${C_RED}✗  token exchange failed${C_RST}\n"
         break

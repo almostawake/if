@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# if (impatient futurist) shared helpers
+# lib — if (impatient futurist) shared helpers
 #
 # Loaded by sibling scripts via:
-#   . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/l"
+#   . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
 #
 # After that, every function/variable below is available in the calling
 # script's shell as if it had been defined inline.
@@ -34,11 +34,11 @@ die()   { printf "${C_RED}error:${C_RST} %s\n" "$*" >&2; exit 1; }
 
 # --- Open a URL in "Chrome with Claude Code" ---
 # Routes the URL through the same --user-data-dir as the launcher app
-# built by `scripts/i`, so a running Chrome-Claude instance receives it
-# (Chrome's process-singleton). If Chrome-Claude isn't running yet, this
-# becomes the cold-boot command and the URL becomes the first tab.
-# Falls back to the system default browser when Chrome.app isn't found
-# (e.g. Linux, or pre-`i` machines).
+# built by `scripts/install-dependencies`, so a running Chrome-Claude
+# instance receives it (Chrome's process-singleton). If Chrome-Claude
+# isn't running yet, this becomes the cold-boot command and the URL
+# becomes the first tab. Falls back to the system default browser when
+# Chrome.app isn't found (e.g. Linux, or pre-install-dependencies machines).
 chrome_open() {
   local url="$1"
   local chrome_bin=""

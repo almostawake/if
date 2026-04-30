@@ -36,7 +36,7 @@ takes about 5 minutes. follow the prompts as they appear.
 after install finishes, run:
 
 ```sh
-bash ~/.if/staging/scripts/n
+bash ~/.if/staging/scripts/setup-project
 ```
 
 this will:
@@ -58,7 +58,7 @@ This means your gmail account hasn't accepted the Firebase terms & conditions ye
 2. Click **Create a project** (or **Add project**).
 3. Use any name — e.g. `nothing-yet`. We won't use this project, it's just to trigger ToS acceptance.
 4. Click through the prompts. Accept the free trial / Blaze upgrade if asked.
-5. Once the project finishes creating, return to your terminal and run `create-project` again.
+5. Once the project finishes creating, return to your terminal and run `setup-project` again.
 
 ### other issues
 

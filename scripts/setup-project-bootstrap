@@ -1,9 +1,10 @@
 #!/bin/bash
 #
-# b — refresh ~/.if/staging from origin, then run n (new-project).
+# setup-project-bootstrap — refresh ~/.if/staging from origin, then
+# run setup-project.
 #
 # Designed to be bound to a shell alias for fast invocation:
-#   alias if-new='bash ~/.if/staging/scripts/b'
+#   alias setup-project='bash ~/.if/staging/scripts/setup-project-bootstrap'
 #
 # `git pull --ff-only` keeps the staging clone honest: refuses to merge
 # if local edits have diverged from origin. If that happens you'll see
@@ -13,4 +14,4 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 git pull --ff-only --quiet
-exec bash "$SCRIPT_DIR/n" "$@"
+exec bash "$SCRIPT_DIR/setup-project" "$@"
