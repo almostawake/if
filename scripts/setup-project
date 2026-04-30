@@ -917,7 +917,7 @@ provision_all() {
         printf "Press any key to open the readme..."
         read -n 1 -s -r </dev/tty || true
         printf "\r\033[K"
-        open "$SCRIPT_DIR/../README.md" 2>/dev/null || true
+        chrome_open "https://github.com/almostawake/if#readme"
       fi
       return 1
     fi
@@ -1015,22 +1015,6 @@ pick_account_terminal() {
 # and writes the cred file under ~/.if/creds. On any failure: returns 1
 # with ACCESS_TOKEN unset (caller decides how to surface that).
 do_oauth() {
-  echo ""
-  echo "Opening Google sign-in in your browser. The next page will ask you"
-  echo "to approve the following:"
-  echo ""
-  printf "  ${C_GRN}✓${C_RST} See which Google account is yours (email + profile)\n"
-  printf "  ${C_GRN}✓${C_RST} Manage Google Cloud resources on your behalf\n"
-  printf "    ${C_GRAY}(create projects, enable APIs, deploy services)${C_RST}\n"
-  echo ""
-  echo "It will NOT request:"
-  printf "  ${C_RED}✗${C_RST} Gmail, Drive, Calendar, Sheets, or any personal data\n"
-  printf "  ${C_RED}✗${C_RST} Access to other Google accounts\n"
-  printf "  ${C_RED}✗${C_RST} Any third-party services\n"
-  echo ""
-  printf "${C_GRAY}Revoke any time at https://myaccount.google.com/permissions${C_RST}\n"
-  echo ""
-
   http_start
 
   local redirect_uri scope_enc redirect_enc auth_url
@@ -1117,9 +1101,13 @@ JSON
 echo ""
 heading "let's set up a new project"
 echo ""
-if ! prompt_yn "Ready to set up your Google cloud project?" "Y"; then
-  exit 0
-fi
+echo "Next you'll give access to your dedicated gmail account so that"
+echo "claude can administer things (only in that account) on your"
+echo "behalf. When you're set, log in with that account and give access,"
+echo "then come back here."
+echo ""
+printf "${C_GRAY}press enter to continue${C_RST}\n"
+read -r _ </dev/tty 2>/dev/null || true
 echo ""
 
 # Make sure the perl HTTP server is cleaned up on any exit (ctrl-c, error,
