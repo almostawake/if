@@ -7,12 +7,7 @@
 # Run via the public bootstrap:
 #   curl -fsSL https://almostawake.com/i.sh | bash
 # which clones this repo to ~/.if/staging and execs this script.
-#
-# CLAUDE EDIT NOTICE: Don't bump ZSHRC_VERSION in zshrc-remote for
-# changes to THIS file — that counter is for user-shell changes only
-# (it shows in their prompt, so bumping it without a zshrc change is
-# misleading).
-#
+
 set -e
 
 # --- Load shared helpers (colors, prompts, OS detection) ---
