@@ -52,7 +52,7 @@
           placeholder="you@example.com"
         />
         <button class="tx-btn" type="submit" disabled={sending || !email.trim()}>
-          {sending ? 'sending…' : 'sign in'}
+          {sending ? 'sending…' : 'send link'}
         </button>
       </div>
       {#if error}
