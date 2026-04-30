@@ -602,12 +602,15 @@ create_storage_bucket() {
   fi
 }
 
-# Configure email-link sign-in via Identity Toolkit. Reads the existing
-# authorizedDomains list and appends "localhost" so the link works in
-# local dev (projects created after 2025-04-28 don't include it by default).
-configure_email_link_auth() {
+# Configure Firebase Auth providers via Identity Toolkit. Enables
+# anonymous sign-in (handy starter for personal-automation apps that
+# don't yet need real identity) and email-link sign-in. Also reads the
+# existing authorizedDomains list and appends "localhost" so email links
+# work in local dev (projects created after 2025-04-28 don't include
+# localhost by default).
+configure_auth() {
   local pid="$1"
-  http_log "configure_email_link_auth start: pid=$pid"
+  http_log "configure_auth start: pid=$pid"
 
   # The Identity Toolkit Config resource doesn't exist until the first PATCH —
   # so GET can return 404 even on a project where the API is enabled.
@@ -619,15 +622,15 @@ configure_email_link_auth() {
     -H "X-Goog-User-Project: $pid" \
     "https://identitytoolkit.googleapis.com/admin/v2/projects/$pid/config")
   cur=$(cat "$cur_tmp"); rm -f "$cur_tmp"
-  http_log "configure_email_link_auth $pid GET → HTTP $cur_code body: $(log_trunc "$cur")"
+  http_log "configure_auth $pid GET → HTTP $cur_code body: $(log_trunc "$cur")"
 
   # If config doesn't exist (fresh project), initializeAuth creates it.
   # PATCH alone won't — it returns CONFIGURATION_NOT_FOUND. initializeAuth
   # bootstraps the project on Identity Platform (free tier: 50K MAU/month),
-  # which is more than enough for personal-automation use. Email-link sign-in
-  # works the same as on plain Firebase Auth.
+  # which is more than enough for personal-automation use. Anonymous and
+  # email-link sign-in both work the same as on plain Firebase Auth.
   if [ "$cur_code" = "404" ]; then
-    http_log "configure_email_link_auth $pid: initializing Identity Platform"
+    http_log "configure_auth $pid: initializing Identity Platform"
     local init_tmp; init_tmp=$(mktemp)
     local init_code init_body
     init_code=$(curl -s -o "$init_tmp" -w "%{http_code}" -X POST \
@@ -637,7 +640,7 @@ configure_email_link_auth() {
       -d '{}' \
       "https://identitytoolkit.googleapis.com/v2/projects/$pid/identityPlatform:initializeAuth")
     init_body=$(cat "$init_tmp"); rm -f "$init_tmp"
-    http_log "configure_email_link_auth $pid initializeAuth → HTTP $init_code body: $(log_trunc "$init_body")"
+    http_log "configure_auth $pid initializeAuth → HTTP $init_code body: $(log_trunc "$init_body")"
     if [ "$init_code" != "200" ]; then
       return 1
     fi
@@ -649,12 +652,12 @@ configure_email_link_auth() {
       -H "X-Goog-User-Project: $pid" \
       "https://identitytoolkit.googleapis.com/admin/v2/projects/$pid/config")
     cur=$(cat "$cur_tmp"); rm -f "$cur_tmp"
-    http_log "configure_email_link_auth $pid GET (post-init) → HTTP $cur_code body: $(log_trunc "$cur")"
+    http_log "configure_auth $pid GET (post-init) → HTTP $cur_code body: $(log_trunc "$cur")"
     if [ "$cur_code" != "200" ]; then
       return 1
     fi
   elif [ "$cur_code" != "200" ]; then
-    http_log "configure_email_link_auth: unexpected GET status $cur_code"
+    http_log "configure_auth: unexpected GET status $cur_code"
     return 1
   fi
 
@@ -666,10 +669,10 @@ configure_email_link_auth() {
     my @d = @{$j->{authorizedDomains} // []};
     push @d, "localhost" unless grep { $_ eq "localhost" } @d;
     print encode_json(\@d);
-  ') || { http_log "configure_email_link_auth: domain merge failed"; return 1; }
+  ') || { http_log "configure_auth: domain merge failed"; return 1; }
 
   local body
-  body=$(printf '{"signIn":{"email":{"enabled":true,"passwordRequired":false}},"authorizedDomains":%s}' "$domains_json")
+  body=$(printf '{"signIn":{"anonymous":{"enabled":true},"email":{"enabled":true,"passwordRequired":false}},"authorizedDomains":%s}' "$domains_json")
 
   local tmp; tmp=$(mktemp)
   local code
@@ -678,9 +681,9 @@ configure_email_link_auth() {
     -H "X-Goog-User-Project: $pid" \
     -H "Content-Type: application/json" \
     -d "$body" \
-    "https://identitytoolkit.googleapis.com/admin/v2/projects/$pid/config?updateMask=signIn.email,authorizedDomains")
+    "https://identitytoolkit.googleapis.com/admin/v2/projects/$pid/config?updateMask=signIn.anonymous,signIn.email,authorizedDomains")
   local resp; resp=$(cat "$tmp"); rm -f "$tmp"
-  http_log "configure_email_link_auth $pid → HTTP $code body: $(log_trunc "$resp")"
+  http_log "configure_auth $pid → HTTP $code body: $(log_trunc "$resp")"
   if [ "$code" != "200" ]; then
     return 1
   fi
@@ -768,7 +771,7 @@ PROV_PENDING=(
   "create web app config"
   "create firestore (sydney)"
   "create storage bucket (sydney)"
-  "configure email-link auth"
+  "configure auth providers"
 )
 PROV_RUNNING=(
   "enabling firebase api"
@@ -791,7 +794,7 @@ PROV_RUNNING=(
   "creating web app config"
   "creating firestore (sydney)"
   "creating storage bucket (sydney)"
-  "configuring email-link auth"
+  "configuring auth providers"
 )
 PROV_DONE=(
   "firebase api enabled"
@@ -814,7 +817,7 @@ PROV_DONE=(
   "web app config created"
   "firestore (sydney) created"
   "storage bucket (sydney) created"
-  "email-link auth configured"
+  "auth providers configured"
 )
 PROV_FNS=(
   "_prov_enable_firebase"
@@ -862,7 +865,7 @@ _prov_enable_apikeys()          { enable_api "$PID" apikeys.googleapis.com; }
 _prov_web_app()                 { create_web_app "$PID"; }
 _prov_firestore()               { create_firestore "$PID"; }
 _prov_storage()                 { create_storage_bucket "$PID"; }
-_prov_auth()                    { configure_email_link_auth "$PID"; }
+_prov_auth()                    { configure_auth "$PID"; }
 
 # draw_prov_row "$i" "$state"  — state: done | running | pending | failed
 draw_prov_row() {
@@ -1252,7 +1255,4 @@ fi
 
 echo ""
 heading "project ready"
-echo ""
-echo "Project ID:       $PID"
-echo "Firebase Console: https://console.firebase.google.com/project/$PID"
 echo ""
