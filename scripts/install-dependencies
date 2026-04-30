@@ -91,35 +91,6 @@ elif command -v claude >/dev/null 2>&1; then
   have_claude=true
 fi
 
-have_git=false
-# Check ~/.if/git/bin/git directly first — aa/i (the bootstrap, served
-# as i.sh) installs there but doesn't update PATH, so `command -v git`
-# misses it on fresh
-# shells. The wrapper-presence sentinel (git.real) ensures we don't
-# treat a half-broken pre-wrapper install as healthy.
-if [ -x "$IF_HOME/git/bin/git" ] && [ -x "$IF_HOME/git/bin/git.real" ]; then
-  have_git=true
-else
-  git_path="$(command -v git 2>/dev/null || true)"
-  if [ -n "$git_path" ]; then
-    case "$git_path" in
-      /usr/bin/git)
-        # macOS ships /usr/bin/git as a stub that triggers the CLT install
-        # dialog when invoked. Real only once Xcode CLT/app is installed.
-        xcode-select -p >/dev/null 2>&1 && have_git=true
-        ;;
-      *) have_git=true ;;
-    esac
-  fi
-fi
-
-have_gh=false
-if [ -x "$IF_HOME/gh/bin/gh" ]; then
-  have_gh=true
-elif command -v gh >/dev/null 2>&1; then
-  have_gh=true
-fi
-
 # Chrome row represents Chrome.app + Claude-connected launcher together —
 # only "installed" when both exist.
 have_chrome=false
@@ -771,10 +742,10 @@ _write_zshrc() {
 ITEMS=()
 INSTALL_FNS=()
 INSTALLED=()
+# git + gh are installed by aa/i (the curl bootstrap) before exec'ing
+# this script — they're guaranteed present here, so no row for them.
 ITEMS+=("node 22");                     INSTALL_FNS+=("_install_node");   INSTALLED+=("$have_node22")
 ITEMS+=("java 21");                     INSTALL_FNS+=("_install_java");   INSTALLED+=("$have_java21")
-ITEMS+=("git");                          INSTALL_FNS+=("_install_git");    INSTALLED+=("$have_git")
-ITEMS+=("gh");                           INSTALL_FNS+=("_install_gh");     INSTALLED+=("$have_gh")
 ITEMS+=("claude code [in YOLO mode]");   INSTALL_FNS+=("_install_claude"); INSTALLED+=("$have_claude")
 ITEMS+=("chrome [connected to Claude]"); INSTALL_FNS+=("_install_chrome"); INSTALLED+=("$have_chrome")
 N=${#ITEMS[@]}
