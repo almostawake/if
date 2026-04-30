@@ -763,19 +763,29 @@ _write_zshrc() {
 # UI — draw the reusable list, prompt, and update rows in place
 # ==========================================================================
 
-# Build the list of items that need installing. Already-installed ones
-# never appear on screen — the user only sees what the installer is
-# actually going to do. INSTALL_FNS is kept in lockstep with ITEMS so the
-# run loop can be a simple zip over indices.
+# All rows always appear — already-installed items render green from
+# the start (same shape as aa/i and scripts/setup-project), so the user
+# sees the full picture rather than a mystery skip. INSTALLED is a
+# parallel array of "true"/"false" used to drive the initial render and
+# skip those rows in the run loop.
 ITEMS=()
 INSTALL_FNS=()
-[ "$have_node22" = "true" ] || { ITEMS+=("node 22");                     INSTALL_FNS+=("_install_node");   }
-[ "$have_java21" = "true" ] || { ITEMS+=("java 21");                     INSTALL_FNS+=("_install_java");   }
-[ "$have_git" = "true" ]    || { ITEMS+=("git");                          INSTALL_FNS+=("_install_git");    }
-[ "$have_gh" = "true" ]     || { ITEMS+=("gh");                           INSTALL_FNS+=("_install_gh");     }
-[ "$have_claude" = "true" ] || { ITEMS+=("claude code [in YOLO mode]");   INSTALL_FNS+=("_install_claude"); }
-[ "$have_chrome" = "true" ] || { ITEMS+=("chrome [connected to Claude]"); INSTALL_FNS+=("_install_chrome"); }
+INSTALLED=()
+ITEMS+=("node 22");                     INSTALL_FNS+=("_install_node");   INSTALLED+=("$have_node22")
+ITEMS+=("java 21");                     INSTALL_FNS+=("_install_java");   INSTALLED+=("$have_java21")
+ITEMS+=("git");                          INSTALL_FNS+=("_install_git");    INSTALLED+=("$have_git")
+ITEMS+=("gh");                           INSTALL_FNS+=("_install_gh");     INSTALLED+=("$have_gh")
+ITEMS+=("claude code [in YOLO mode]");   INSTALL_FNS+=("_install_claude"); INSTALLED+=("$have_claude")
+ITEMS+=("chrome [connected to Claude]"); INSTALL_FNS+=("_install_chrome"); INSTALLED+=("$have_chrome")
 N=${#ITEMS[@]}
+
+# Count how many actually need work — drives whether we run the
+# chrome-default-browser interactive step (skipped on re-runs where
+# everything's already installed).
+N_TODO=0
+for x in "${INSTALLED[@]}"; do
+  [ "$x" = "false" ] && N_TODO=$((N_TODO + 1))
+done
 
 # draw_row "$i" "$state"  — state: installed | installing | pending
 # No status text at end; the icon + whole-line colour carry the state.
@@ -808,8 +818,8 @@ update_row() {
 }
 
 # run_install "$i" "_install_fn" — flips row to "installing", runs the
-# function, flips to "installed" on success. Assumes the list has already
-# been filtered to only items that actually need installing.
+# function, flips to "installed" on success. Caller is responsible for
+# skipping rows whose INSTALLED flag is already "true".
 run_install() {
   local i="$1" fn="$2"
   update_row "$i" "installing"
@@ -827,22 +837,22 @@ run_install() {
   fi
 }
 
-# --- Short-circuit if everything's already installed ---
-if [ "$N" -eq 0 ]; then
-  say "All dependencies already installed."
-  exit 0
-fi
-
 # --- Initial list (cursor ends on the line just below the last row) ---
+# All rows drawn — already-installed ones go green from the start.
 # No header / no prompt: aa/i prints the section heading before exec'ing
 # us, and the "Ready to go?" up-front already covers consent for the
 # whole flow.
 for i in $(seq 0 $((N - 1))); do
-  draw_row "$i" "pending"
+  if [ "${INSTALLED[$i]}" = "true" ]; then
+    draw_row "$i" "installed"
+  else
+    draw_row "$i" "pending"
+  fi
 done
 
-# --- Run installs (UI rows update in place) ---
+# --- Run pending installs (UI rows update in place) ---
 for i in "${!ITEMS[@]}"; do
+  [ "${INSTALLED[$i]}" = "true" ] && continue
   run_install "$i" "${INSTALL_FNS[$i]}"
 done
 
@@ -851,31 +861,36 @@ _configure_terminal  >> "$INSTALL_LOG" 2>&1
 _configure_workspace >> "$INSTALL_LOG" 2>&1
 _write_zshrc         >> "$INSTALL_LOG" 2>&1
 
-echo ""
-echo ""
-heading "instructions for the next step: making chrome the default browser"
-echo ""
-echo "Next we'll launch chrome. when that happens, it's important to set chrome"
-echo "as the default browser. You can ignore/dismiss alerts and press \"Don't"
-echo "sign in\" for now."
-echo ""
-echo "Once that's done, QUIT CHROME and come back here :)"
-echo ""
-printf "${C_GRAY}press enter when you're ready${C_RST}\n"
-read -r _ </dev/tty 2>/dev/null || true
+# Chrome-default-browser is a first-run-only step: we only need the user
+# to set Chrome as default once. Skip it on re-runs (have_chrome was
+# already true at the start of this run).
+if [ "$have_chrome" = "false" ]; then
+  echo ""
+  echo ""
+  heading "instructions for the next step: making chrome the default browser"
+  echo ""
+  echo "Next we'll launch chrome. when that happens, it's important to set chrome"
+  echo "as the default browser. You can ignore/dismiss alerts and press \"Don't"
+  echo "sign in\" for now."
+  echo ""
+  echo "Once that's done, QUIT CHROME and come back here :)"
+  echo ""
+  printf "${C_GRAY}press enter when you're ready${C_RST}\n"
+  read -r _ </dev/tty 2>/dev/null || true
 
-if [ "$OS" = "darwin" ] && [ -d "$HOME/Applications/Chrome with Claude Code.app" ]; then
-  open "$HOME/Applications/Chrome with Claude Code.app" 2>/dev/null || true
-  # Wait up to 10s for Chrome to appear in the process table (cold start
-  # takes a few seconds). Then block unbounded until the user quits it.
-  # By design: if they don't quit, we don't proceed.
-  for _ in $(seq 1 20); do
-    pgrep -U "$(id -u)" -f "$HOME/Applications/Google Chrome" >/dev/null 2>&1 && break
-    sleep 0.5
-  done
-  while pgrep -U "$(id -u)" -f "$HOME/Applications/Google Chrome" >/dev/null 2>&1; do
-    sleep 1
-  done
+  if [ "$OS" = "darwin" ] && [ -d "$HOME/Applications/Chrome with Claude Code.app" ]; then
+    open "$HOME/Applications/Chrome with Claude Code.app" 2>/dev/null || true
+    # Wait up to 10s for Chrome to appear in the process table (cold start
+    # takes a few seconds). Then block unbounded until the user quits it.
+    # By design: if they don't quit, we don't proceed.
+    for _ in $(seq 1 20); do
+      pgrep -U "$(id -u)" -f "$HOME/Applications/Google Chrome" >/dev/null 2>&1 && break
+      sleep 0.5
+    done
+    while pgrep -U "$(id -u)" -f "$HOME/Applications/Google Chrome" >/dev/null 2>&1; do
+      sleep 1
+    done
+  fi
 fi
 
 echo ""
