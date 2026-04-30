@@ -1114,6 +1114,9 @@ JSON
   return $rc
 }
 
+echo ""
+heading "let's set up a new project"
+echo ""
 if ! prompt_yn "Ready to set up your Google cloud project?" "Y"; then
   exit 0
 fi
@@ -1261,6 +1264,8 @@ if ! provision_all; then
 fi
 
 echo ""
-echo "Project: $PID"
-echo "Console: https://console.firebase.google.com/project/$PID"
+heading "project ready"
+echo ""
+echo "Project ID:       $PID"
+echo "Firebase Console: https://console.firebase.google.com/project/$PID"
 echo ""
