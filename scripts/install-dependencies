@@ -54,20 +54,42 @@ fi
 # Detection — what's already installed
 # ==========================================================================
 
+# Detection probes the contained install path first, then PATH. We run
+# in a fresh non-interactive bash (aa/i execs us without sourcing rc
+# files), so PATH usually doesn't include $IF_HOME/{node,java,claude}/bin
+# even when those installs already exist — relying on `command -v` alone
+# made the script re-install on every run.
 have_node22=false
-if command -v node >/dev/null 2>&1; then
-  nm="$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)"
+node_bin=""
+if [ -x "$IF_HOME/node/bin/node" ]; then
+  node_bin="$IF_HOME/node/bin/node"
+elif command -v node >/dev/null 2>&1; then
+  node_bin="node"
+fi
+if [ -n "$node_bin" ]; then
+  nm="$("$node_bin" -v 2>/dev/null | sed 's/v//' | cut -d. -f1)"
   [ -n "$nm" ] && [ "$nm" -ge 22 ] 2>/dev/null && have_node22=true
 fi
 
 have_java21=false
-if command -v java >/dev/null 2>&1; then
-  jm="$(java -version 2>&1 | awk -F '"' '/version/ {print $2}' | cut -d. -f1)"
+java_bin=""
+# Adoptium ships .jdk-shaped trees on macOS (Contents/Home/bin/java)
+# and flat trees on Linux (bin/java). Check both.
+if   [ -x "$IF_HOME/java/Contents/Home/bin/java" ]; then java_bin="$IF_HOME/java/Contents/Home/bin/java"
+elif [ -x "$IF_HOME/java/bin/java" ];               then java_bin="$IF_HOME/java/bin/java"
+elif command -v java >/dev/null 2>&1;               then java_bin="java"
+fi
+if [ -n "$java_bin" ]; then
+  jm="$("$java_bin" -version 2>&1 | awk -F '"' '/version/ {print $2}' | cut -d. -f1)"
   [ -n "$jm" ] && [ "$jm" -ge 21 ] 2>/dev/null && have_java21=true
 fi
 
 have_claude=false
-command -v claude >/dev/null 2>&1 && have_claude=true
+if [ -x "$IF_HOME/claude/bin/claude" ]; then
+  have_claude=true
+elif command -v claude >/dev/null 2>&1; then
+  have_claude=true
+fi
 
 have_git=false
 # Check ~/.if/git/bin/git directly first — aa/i (the bootstrap, served
@@ -414,15 +436,16 @@ CHROMEPLIST
 # No kill-Chrome dance needed: Chrome with a different --user-data-dir
 # coexists fine with the user's regular Chrome. If Chrome-Claude is
 # already running, Chrome's process-singleton sends activation to the
-# existing instance; the new process exits immediately. Debug port
-# stays alive either way.
+# existing instance (and any URL args become tabs in that window); the
+# new process exits immediately. Debug port stays alive either way.
 
 PROFILE="\$HOME/Library/Application Support/Google/Chrome-Claude"
 
 "$chrome_app/Contents/MacOS/Google Chrome" \\
   --remote-debugging-port=9222 \\
   --silent-debugger-extension-api \\
-  --user-data-dir="\$PROFILE" &>/dev/null &
+  --user-data-dir="\$PROFILE" \\
+  "\$@" &>/dev/null &
 
 # Wait up to 10s for the debug port to accept connections. When Chrome-Claude
 # is already running, this returns near-instantly. Cold start takes ~2-4s.
@@ -858,6 +881,6 @@ fi
 echo ""
 heading "one-time setup done"
 echo ""
-printf "${C_GRN}Your machine has all the right bits to build solutions${C_RST}\n"
+printf "Your machine is ready for building.  sweeet. \n"
 echo ""
 exec bash "$IF_HOME/staging/scripts/setup-project-bootstrap"

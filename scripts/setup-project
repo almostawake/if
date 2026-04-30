@@ -911,8 +911,7 @@ provision_all() {
       update_prov_row "$i" "failed"
       echo ""
       if [ "$fn" = "_prov_add_firebase" ]; then
-        echo "Failed to add firebase to the project. This most likely means"
-        echo "you haven't yet accepted the Firebase terms & conditions."
+        printf "${C_RED}✗  Failed to add firebase to the project. This most likely means\n   you haven't yet accepted the Firebase terms & conditions.${C_RST}\n"
         echo ""
         printf "Press any key to open the readme..."
         read -n 1 -s -r </dev/tty || true
