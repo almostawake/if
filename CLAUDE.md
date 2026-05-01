@@ -12,6 +12,9 @@ Read the relevant topic file before working in its area:
 - **docs/CLAUDE-STACK.md** — target tech stack and architecture, stick to these technologies, they are all pre-provisioned
 - **docs/CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
 
+## Personal state (~/.if)
+- Before any GCP / Firebase / Google OAuth work, read `~/.if/CLAUDE.md` (scratch+tooling dir) and `~/.if/creds/CLAUDE.md` (credential contract — auto-refresh expired access tokens, never re-prompt for OAuth because of expiry).
+
 ## How this template runs end-to-end
 
 Three commands span the install → project → deploy lifecycle. Read this before debugging anything that crosses the script boundary.
@@ -35,6 +38,8 @@ The template ships with **Firebase Auth Email Link sign-in** + an `allowedEmails
 Don't add Google OAuth, password auth, or other providers without asking. Email Link + whitelist is the chosen pattern: zero passwords, no consent-screen setup, easy to administrate. Point users here if they ask for "logins".
 
 **On the Firebase Web "API key" (`AIzaSy…`) in `client/.env.production`:** it's a misnamed *public project identifier*, not a credential — see [Firebase docs](https://firebase.google.com/docs/projects/api-keys). Safe to ship in the bundle. Real auth is Firebase Auth ID tokens + Firestore security rules. `setup-project` writes this file post-clone via the Firebase Management API; never commit it (gitignored).
+
+**`signInWithRedirect` gotcha (if you ever add a redirect-based provider):** breaks in Chrome under third-party cookie restrictions. Fix in the prod Firebase config: `authDomain = window.location.host` (same-origin redirect) + call `getRedirectResult(auth)` on init. Otherwise users land back on the login screen after selecting their account.
 
 ## User requirements
 - If the user asks for something that will break the architecture or create debt, suggest alternatives from docs/CLAUDE-STACK.md first.
