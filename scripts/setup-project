@@ -1253,6 +1253,157 @@ if ! provision_all; then
   exit 1
 fi
 
+# =====================================================================
+# SECTION 7 — Clone the if template, install deps, deploy
+# =====================================================================
+# Drops a fresh checkout into ${PROJECT_DIR}/<pid> (PROJECT_DIR comes
+# from ~/.zshrc — set by scripts/install-dependencies, default
+# ~/Projects), writes a root .env (PROJECT_ID + ACCOUNT_EMAIL — see
+# CLAUDE.md § Deploying), installs deps, builds the client, and runs
+# `node scripts/deploy.mjs`. We use scripts/deploy.mjs rather than
+# `firebase deploy` because gcloud's OAuth client can't grant the
+# Firebase scope; see scripts/deploy.mjs for the full reasoning.
+
+PROJECT_PARENT="${PROJECT_DIR:-$HOME/Projects}"
+PROJECT_PATH="$PROJECT_PARENT/$PID"
+mkdir -p "$PROJECT_PARENT"
+
+# Labelled step runner: prints "⋯ label" while $2... runs (output
+# captured to $HTTP_LOG), replaces with "✓ label" on success or "✗ label"
+# + log tail + exit on failure.
+_deploy_step() {
+  local label="$1"; shift
+  printf "${C_GRAY}⋯  %s${C_RST}" "$label"
+  if "$@" >> "$HTTP_LOG" 2>&1; then
+    printf "\r\033[K${C_GRN}✓  %s${C_RST}\n" "$label"
+  else
+    printf "\r\033[K${C_RED}✗  %s${C_RST}\n" "$label"
+    echo ""
+    echo "see $HTTP_LOG for details" >&2
+    exit 1
+  fi
+}
+
+# Idempotent clone: if the dir already exists we leave it alone (so
+# re-runs of setup-project don't nuke local edits). Fresh runs do a
+# real `gh repo clone`.
+_clone_template() {
+  if [ -e "$PROJECT_PATH" ]; then
+    echo "$PROJECT_PATH already exists — skipping clone"
+    return 0
+  fi
+  gh repo clone almostawake/if "$PROJECT_PATH"
+}
+
+# Write the root .env that scripts/deploy.mjs reads. .env is gitignored,
+# so it's per-machine state, not part of the template. ACCOUNT_EMAIL
+# pins the gcloud account so multi-account machines deploy from the
+# right one regardless of `gcloud config set account` drift.
+_write_env() {
+  local env_file="$PROJECT_PATH/.env"
+  cat > "$env_file" <<ENVEOF
+# Written by scripts/setup-project. .env is gitignored — local to this
+# machine. scripts/deploy.mjs reads PROJECT_ID + ACCOUNT_EMAIL from here.
+PROJECT_ID=$PID
+ACCOUNT_EMAIL=$EMAIL
+ENVEOF
+}
+
+# Seed the project owner's email into Firestore's `allowedEmails`
+# collection so they can use the app on day one. The firestore.rules
+# require an existing membership before allowing reads/writes — without
+# this seed, the first user would be locked out and would need to add
+# themselves via the Firebase Console.
+#
+# Schema (see client/src/lib/types/AllowedEmail.ts):
+#   doc id: lowercased email
+#   fields: { email, addedAt (ms epoch), addedBy }
+#
+# The OAuth token has cloud-platform scope, which is admin-level for
+# Firestore — bypasses security rules. 200 = created, 409 = already
+# exists (treated as success so re-runs are no-ops).
+_seed_allowed_email() {
+  local email_lc now_ms body code
+  email_lc=$(printf '%s' "$EMAIL" | tr '[:upper:]' '[:lower:]')
+  now_ms=$(($(date +%s) * 1000))
+  body=$(printf '{"fields":{"email":{"stringValue":"%s"},"addedAt":{"integerValue":"%d"},"addedBy":{"stringValue":"%s"}}}' \
+    "$email_lc" "$now_ms" "$email_lc")
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "X-Goog-User-Project: $PID" \
+    -H "Content-Type: application/json" \
+    --data "$body" \
+    "https://firestore.googleapis.com/v1/projects/$PID/databases/(default)/documents/allowedEmails?documentId=$email_lc")
+  http_log "_seed_allowed_email: HTTP $code for allowedEmails/$email_lc"
+  case "$code" in
+    200|409) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Fetch the Firebase Web config for the just-provisioned web app and
+# write client/.env.production so the Vite build can bake it into the
+# bundle. The "apiKey" returned here is a public project identifier —
+# see https://firebase.google.com/docs/projects/api-keys — safe to ship
+# in the client. Real auth is enforced by Firebase Auth + Firestore
+# rules, not the key.
+_write_client_env() {
+  local list_resp app_id cfg
+  list_resp=$(curl -sfL \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "X-Goog-User-Project: $PID" \
+    "https://firebase.googleapis.com/v1beta1/projects/$PID/webApps") || {
+      http_log "_write_client_env: webApps list failed"; return 1; }
+  app_id=$(printf '%s' "$list_resp" | perl -MJSON::PP -e '
+    my $j = decode_json(join("", <STDIN>));
+    print $j->{apps}[0]{appId} if $j->{apps} && @{$j->{apps}};
+  ')
+  [ -z "$app_id" ] && { http_log "_write_client_env: no appId in webApps list"; return 1; }
+
+  cfg=$(curl -sfL \
+    -H "Authorization: Bearer $ACCESS_TOKEN" \
+    -H "X-Goog-User-Project: $PID" \
+    "https://firebase.googleapis.com/v1beta1/projects/$PID/webApps/$app_id/config") || {
+      http_log "_write_client_env: webApps.getConfig failed for $app_id"; return 1; }
+
+  CFG="$cfg" perl -MJSON::PP -e '
+    my $c = decode_json($ENV{CFG});
+    for my $k (qw(apiKey authDomain projectId storageBucket messagingSenderId appId)) {
+      die "missing $k in webApps.getConfig response\n" unless defined $c->{$k};
+    }
+    print "VITE_FIREBASE_API_KEY=$c->{apiKey}\n";
+    print "VITE_FIREBASE_AUTH_DOMAIN=$c->{authDomain}\n";
+    print "VITE_FIREBASE_PROJECT_ID=$c->{projectId}\n";
+    print "VITE_FIREBASE_STORAGE_BUCKET=$c->{storageBucket}\n";
+    print "VITE_FIREBASE_MESSAGING_SENDER_ID=$c->{messagingSenderId}\n";
+    print "VITE_FIREBASE_APP_ID=$c->{appId}\n";
+  ' > "$PROJECT_PATH/client/.env.production"
+}
+
+_install_deps() { ( cd "$PROJECT_PATH" && npm run install:all ); }
+
+# scripts/deploy.mjs reads PROJECT_ID + ACCOUNT_EMAIL from .env, runs
+# the build itself, then pushes hosting + firestore rules. We pass
+# GOOGLE_ACCESS_TOKEN explicitly here to skip the cred-file/gcloud
+# round-trip (we already have a fresh token from earlier in the script).
+_deploy_to_fb() {
+  ( cd "$PROJECT_PATH" && \
+    GOOGLE_ACCESS_TOKEN="$ACCESS_TOKEN" node scripts/deploy.mjs )
+}
+
+echo ""
+heading "now: clone, install, deploy"
+echo ""
+_deploy_step "cloning if template into $PROJECT_PATH" _clone_template
+_deploy_step "writing .env (PROJECT_ID, ACCOUNT_EMAIL)" _write_env
+_deploy_step "writing client/.env.production (firebase web config)" _write_client_env
+_deploy_step "seeding $EMAIL as initial allowed user" _seed_allowed_email
+_deploy_step "installing dependencies (this can take a minute)" _install_deps
+_deploy_step "building + deploying to firebase" _deploy_to_fb
+
 echo ""
 heading "project ready"
+echo ""
+printf "Live at: ${C_BLU}https://%s.web.app${C_RST}\n" "$PID"
+printf "Code:    %s\n" "$PROJECT_PATH"
 echo ""

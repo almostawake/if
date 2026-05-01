@@ -722,6 +722,9 @@ _write_zshrc() {
     printf 'export PATH="$JAVA_HOME/bin:$PATH"\n'
     printf 'export NPM_CONFIG_CACHE="$HOME/.if/npm-cache"\n'
     printf 'export CLAUDE_CONFIG_DIR="$HOME/.if/claude-config"\n'
+    # Where new projects created by `setup-project` go. Override per machine
+    # (e.g. ~/_code) by editing the line in ~/.zshrc after install.
+    printf 'export PROJECT_DIR="$HOME/Projects"\n'
     printf "alias cc='claude --dangerously-skip-permissions'\n"
     printf "alias ccc='claude --dangerously-skip-permissions --continue'\n"
     printf "alias ccr='claude --dangerously-skip-permissions --resume'\n"

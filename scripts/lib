@@ -87,8 +87,12 @@ detect_os_arch() {
 }
 
 # --- Project folder name prompt + validation ---
-# Sets PROJECT_NAME and PROJECT_DIR. Loops until valid.
+# Reads $PROJECT_DIR (set by the if-install zshrc block, default
+# ~/Projects) as the parent directory and asks for a folder name. Sets
+# PROJECT_NAME (just the name) and PROJECT_PATH (full absolute path).
+# Loops until valid.
 prompt_project_name() {
+  local parent="${PROJECT_DIR:-$HOME/Projects}"
   while true; do
     printf "Project folder name (letters/numbers/dashes, e.g. my-budget-tracker): "
     read -r PROJECT_NAME </dev/tty || PROJECT_NAME=""
@@ -102,14 +106,15 @@ prompt_project_name() {
         continue
         ;;
     esac
-    PROJECT_DIR="$HOME/$PROJECT_NAME"
-    if [ -e "$PROJECT_DIR" ]; then
-      say "  $PROJECT_DIR already exists. Choose a different name."
+    PROJECT_PATH="$parent/$PROJECT_NAME"
+    if [ -e "$PROJECT_PATH" ]; then
+      say "  $PROJECT_PATH already exists. Choose a different name."
       continue
     fi
     break
   done
-  export PROJECT_NAME PROJECT_DIR
+  mkdir -p "$parent"
+  export PROJECT_NAME PROJECT_PATH
 }
 
 # --- Diagnostic report builder ---

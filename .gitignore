@@ -2,7 +2,7 @@ node_modules/
 client/node_modules/
 client/build/
 client/.svelte-kit/
-client/public/*.json
+client/static/*.json
 
 # Firebase
 firebase-debug.log
