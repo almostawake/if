@@ -8,7 +8,7 @@ import {
 } from 'firebase/auth';
 import { getFirebase } from '$lib/firebase/init';
 
-const PENDING_EMAIL_KEY = 'appsvelte:pendingSignInEmail';
+const PENDING_EMAIL_KEY = 'if:pendingSignInEmail';
 
 export const AuthService = {
   /**
