@@ -1295,6 +1295,59 @@ _clone_template() {
   gh repo clone almostawake/if "$PROJECT_PATH"
 }
 
+# Remove template-author-only files from the clone, replace the README
+# with a per-project version, and re-init git so the user gets a clean
+# single-commit history with no upstream tracking.
+#
+# What this strips (kept in sync with AUTHORING.md § Author-only files):
+#   - AUTHORING.md
+#   - scripts/install-dependencies, scripts/setup-project,
+#     scripts/setup-project-bootstrap, scripts/CLAUDE-SCRIPTS.md
+#   - scripts/lib/, scripts/assets/
+#   - <!-- @author-only:start --> ... <!-- @author-only:end --> blocks
+#     inside CLAUDE.md (the discovery pointer that hints AUTHORING.md
+#     exists — irrelevant in clones)
+#
+# Idempotent on the file deletes (rm -f / rm -rf). git init is fine to
+# re-run too — but if this function ran on an existing checkout that
+# already has the user's commits, those would be lost. The orchestration
+# only calls this immediately after a fresh _clone_template, so that's
+# the only state we ever see.
+_strip_template_only() {
+  cd "$PROJECT_PATH"
+  rm -f AUTHORING.md \
+        scripts/install-dependencies \
+        scripts/setup-project \
+        scripts/setup-project-bootstrap \
+        scripts/CLAUDE-SCRIPTS.md
+  rm -rf scripts/lib scripts/assets
+  if [ -f CLAUDE.md ]; then
+    perl -i -0pe 's/<!-- \@author-only:start -->.*?<!-- \@author-only:end -->\n?//gs' CLAUDE.md
+  fi
+  cat > README.md <<MDEOF
+# $PID
+
+Built from the [if](https://github.com/almostawake/if) template.
+
+## Deploy
+
+    node scripts/deploy.mjs
+
+Reads \`PROJECT_ID\` + \`ACCOUNT_EMAIL\` from \`.env\` (gitignored).
+
+## Spin up another project
+
+    bash ~/.if/staging/scripts/setup-project
+MDEOF
+  rm -rf .git
+  git init -q
+  git add -A
+  git -c user.email="$EMAIL" \
+      -c user.name="if template" \
+      -c commit.gpgsign=false \
+      commit -q -m "initial: $PID from if template"
+}
+
 # Write the root .env that scripts/deploy.mjs reads. .env is gitignored,
 # so it's per-machine state, not part of the template. ACCOUNT_EMAIL
 # pins the gcloud account so multi-account machines deploy from the
@@ -1395,6 +1448,7 @@ echo ""
 heading "now: clone, install, deploy"
 echo ""
 _deploy_step "cloning if template into $PROJECT_PATH" _clone_template
+_deploy_step "stripping template-only files + fresh git init" _strip_template_only
 _deploy_step "writing .env (PROJECT_ID, ACCOUNT_EMAIL)" _write_env
 _deploy_step "writing client/.env.production (firebase web config)" _write_client_env
 _deploy_step "seeding $EMAIL as initial allowed user" _seed_allowed_email

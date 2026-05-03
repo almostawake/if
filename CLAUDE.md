@@ -1,10 +1,10 @@
+<!-- @author-only:start -->
+> **Authoring this template?** Read `AUTHORING.md` before touching `scripts/setup-project`, the install/clone lifecycle, or anything labelled template-only — and keep template-only prose in `AUTHORING.md`, not here.
+<!-- @author-only:end -->
+
 # Purpose
 
-This firebase/gcp project was set up from a template at github.com/almostawake/if 
-Its primary purpose is to fast track small automation solutions for non-developers
-
-The project is also home for the main scripts used for one-time osx install of dev apps like git/gh/chrome and per-project setup (including provisioning and deployment).
-These live in scripts/ refer to the md there if you're asked to edit ANY scripts
+Fast-track small automation solutions for non-developers.
 
 # Ways of Working
 
@@ -14,18 +14,6 @@ Read the relevant topic file before working in its area:
 
 ## Personal state (~/.if)
 - Before any GCP / Firebase / Google OAuth work, read `~/.if/CLAUDE.md` (scratch+tooling dir) and `~/.if/creds/CLAUDE.md` (credential contract — auto-refresh expired access tokens, never re-prompt for OAuth because of expiry).
-
-## How this template runs end-to-end
-
-Three commands span the install → project → deploy lifecycle. Read this before debugging anything that crosses the script boundary.
-
-1. **Bootstrap (once per machine)** — `curl -fsSL https://almostawake.com/i | bash` runs `aa/i`. Installs git + gh into `~/.if/`, clones this repo to `~/.if/staging`, then execs `scripts/install-dependencies` which installs node + java + claude code + chrome and writes a marker block to `~/.zshrc` (PATH, `PROJECT_DIR=$HOME/Projects`, the `setup-project` alias).
-
-2. **Per-project setup (once per project)** — the `setup-project` alias runs `scripts/setup-project` from `~/.if/staging`. OAuth-signs the user into Google via a local perl HTTP server (stores tokens in `~/.if/creds/<email>.json` per the contract there); creates / picks a GCP project (`PID`); provisions ~21 APIs + Firestore (sydney) + Storage + Email Link auth; clones this template into `$PROJECT_DIR/<PID>`; writes `.env` (`PROJECT_ID`, `ACCOUNT_EMAIL`) and `client/.env.production` (Firebase web config — fetched via `webApps.getConfig`); seeds the user's email into `allowedEmails`; builds + deploys.
-
-3. **Deploys (any time after)** — `node scripts/deploy.mjs` from the project root. Reads `.env` for `PROJECT_ID` + `ACCOUNT_EMAIL`, gets a fresh access_token from `~/.if/creds/<email>.json` (refreshing in place via the stored refresh_token if expired — never re-prompts OAuth just because of expiry), runs `npm run build:all`, then pushes hosting + firestore.rules via the Firebase REST APIs. See § Deploying for the why.
-
-**The cred contract:** `~/.if/creds/<email>.json` is the source of truth for tokens. `setup-project` writes it post-OAuth; `deploy.mjs` reads it and refreshes-in-place. Full schema + refresh rules: `~/.if/creds/CLAUDE.md`. `gcloud auth print-access-token` is only a fallback when the cred file is missing.
 
 ## Non-technical Audience
 

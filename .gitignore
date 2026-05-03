@@ -19,8 +19,5 @@ ui-debug.log
 client/.env.production
 client/.env
 
-# Service-account keys (if we ever cache them locally during deploy)
-.if/sa-keys/
-
 # OS
 .DS_Store
