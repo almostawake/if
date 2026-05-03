@@ -12,19 +12,22 @@ This file ships only in the template repo. `_strip_template_only` in `scripts/se
 
 Three commands span the install → project → deploy lifecycle. Read this before debugging anything that crosses the script boundary.
 
-1. **Bootstrap (once per machine)** — `curl -fsSL https://almostawake.com/i | bash` runs `aa/i`. Installs git + gh into `~/.if/`, clones this repo to `~/.if/staging`, then execs `scripts/install-dependencies` which installs node + java + claude code + chrome and writes a marker block to `~/.zshrc` (PATH, `PROJECT_DIR=$HOME/Projects`, the `setup-project` alias).
+1. **Bootstrap (once per machine)** — `curl -fsSL https://almostawake.com/i | bash` runs `aa/i`. Installs git + gh into `~/.if/`, clones this repo to `~/.if/staging`, then execs `scripts/install-dependencies` which installs node + java + claude code + chrome, copies `scripts/auth` to `~/.if/bin/auth` (long-lived per-user CLIs live there), and writes a marker block to `~/.zshrc` (PATH including `~/.if/bin`, `PROJECT_DIR=$HOME/Projects`, plus the `auth` and `setup-project` aliases).
 
-2. **Per-project setup (once per project)** — the `setup-project` alias runs `scripts/setup-project` from `~/.if/staging`. OAuth-signs the user into Google via a local perl HTTP server (stores tokens in `~/.if/creds/<email>.json` per the contract there); creates / picks a GCP project (`PID`); provisions ~21 APIs + Firestore (sydney) + Storage + Email Link auth; clones this template into `$PROJECT_DIR/<PID>`; runs `_strip_template_only` (see below); writes `.env` (`PROJECT_ID`, `ACCOUNT_EMAIL`) and `client/.env.production` (Firebase web config — fetched via `webApps.getConfig`); seeds the user's email into `allowedEmails`; builds + deploys.
+2. **Per-project setup (once per project)** — the `setup-project` alias runs `scripts/setup-project` from `~/.if/staging`. Delegates Google sign-in to `~/.if/bin/auth` (Perl loopback OAuth → writes `~/.if/creds/<email>.json` per the contract there → emits the chosen email on stdout); reads back the access_token from the cred file; creates / picks a GCP project (`PID`); provisions ~21 APIs + Firestore (sydney) + Storage + Email Link auth; clones this template into `$PROJECT_DIR/<PID>`; runs `_strip_template_only` (see below); writes `.env` (`PROJECT_ID`, `ACCOUNT_EMAIL`) and `client/.env.production` (Firebase web config — fetched via `webApps.getConfig`); seeds the user's email into `allowedEmails`; builds + deploys.
 
 3. **Deploys (any time after)** — `node scripts/deploy.mjs` from the project root. Reads `.env` for `PROJECT_ID` + `ACCOUNT_EMAIL`, gets a fresh access_token from `~/.if/creds/<email>.json` (refreshing in place via the stored refresh_token if expired — never re-prompts OAuth just because of expiry), runs `npm run build:all`, then pushes hosting + firestore.rules via the Firebase REST APIs. See `CLAUDE.md` § Deploying for the why.
 
-**The cred contract:** `~/.if/creds/<email>.json` is the source of truth for tokens. `setup-project` writes it post-OAuth; `deploy.mjs` reads it and refreshes-in-place. Full schema + refresh rules: `~/.if/creds/CLAUDE.md`. `gcloud auth print-access-token` is only a fallback when the cred file is missing.
+**The cred contract:** `~/.if/creds/<email>.json` is the source of truth for tokens. `~/.if/bin/auth` writes it post-OAuth; `deploy.mjs` reads it and refreshes-in-place. Full schema + refresh rules: `~/.if/creds/CLAUDE.md`. `gcloud auth print-access-token` is only a fallback when the cred file is missing.
+
+**`~/.if/bin/auth` standalone:** the same tool also runs as a bare `auth` from any shell — UI on stderr, chosen email on stdout's last line, so `EMAIL=$(auth)` works. This is what `setup-project` does. Force-reauths every run (no token-refresh shortcut), so the cred file is always fresh after.
 
 ## Author-only files (stripped from clones)
 
 `_strip_template_only` in `scripts/setup-project` removes these from `~/Projects/<pid>` after `gh repo clone`. Keep this list in sync with the function — if you add a new author-only file, add it both places.
 
 - `AUTHORING.md`
+- `scripts/auth` — multi-account Google OAuth CLI; install-dependencies copies it to `~/.if/bin/auth`
 - `scripts/install-dependencies` — bootstrap-time installer for node/java/claude/chrome
 - `scripts/setup-project` — per-project provisioning + first deploy
 - `scripts/setup-project-bootstrap` — early bootstrap stage

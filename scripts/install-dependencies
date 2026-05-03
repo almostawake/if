@@ -686,6 +686,15 @@ _configure_terminal() {
     || true
 }
 
+# Silent end-step: stage long-lived per-user CLIs into ~/.if/bin (which
+# the marker-fenced zshrc block puts on PATH). Currently just `auth`,
+# the multi-account Google OAuth login lifted out of setup-project.
+_install_bin() {
+  mkdir -p "$IF_HOME/bin"
+  cp "$SCRIPT_DIR/auth" "$IF_HOME/bin/auth"
+  chmod +x "$IF_HOME/bin/auth"
+}
+
 # Silent end-step: write our marker-fenced block to ~/.zshrc.
 _write_zshrc() {
   local zshrc="$HOME/.zshrc"
@@ -712,6 +721,7 @@ _write_zshrc() {
   {
     [ -s "$zshrc" ] && printf '\n'
     printf '%s\n' "$MARKER_START"
+    printf 'export PATH="$HOME/.if/bin:$PATH"\n'
     printf 'export PATH="$HOME/.if/node/bin:$PATH"\n'
     printf 'export PATH="$HOME/.if/claude/bin:$PATH"\n'
     printf 'export PATH="$HOME/.if/gh/bin:$PATH"\n'
@@ -728,6 +738,7 @@ _write_zshrc() {
     printf "alias cc='claude --dangerously-skip-permissions'\n"
     printf "alias ccc='claude --dangerously-skip-permissions --continue'\n"
     printf "alias ccr='claude --dangerously-skip-permissions --resume'\n"
+    printf "alias auth='\$HOME/.if/bin/auth'\n"
     printf "alias setup-project='bash \$HOME/.if/staging/scripts/setup-project-bootstrap'\n"
     printf '%s\n' "$MARKER_END"
   } >> "$zshrc"
@@ -833,6 +844,7 @@ done
 # --- Silent end steps (no row, just do the work) ---
 _configure_terminal  >> "$INSTALL_LOG" 2>&1
 _configure_workspace >> "$INSTALL_LOG" 2>&1
+_install_bin         >> "$INSTALL_LOG" 2>&1
 _write_zshrc         >> "$INSTALL_LOG" 2>&1
 
 # Chrome-default-browser is a first-run-only step: we only need the user

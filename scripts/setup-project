@@ -4,12 +4,11 @@
 # everything the template needs to deploy.
 #
 # Architecture:
-#   - SECTION 1: HTTP server (Perl-backed loopback) — used ONLY to catch
-#     the OAuth callback. Account picking happens in the terminal.
-#   - SECTION 2: Helpers (url coding, json, OAuth refresh, GCP/Firebase REST).
-#   - SECTION 3: Tiny HTML for the OAuth landing tab.
-#   - SECTION 4: Terminal account chooser + OAuth flow.
-#   - SECTION 5: Terminal project chooser + provisioning.
+#   - SECTION 1: Logging.
+#   - SECTION 2: Helpers (json, GCP/Firebase REST plumbing).
+#   - SECTION 3: Sign in — delegated to ~/.if/bin/auth.
+#   - SECTION 4: Terminal project chooser + provisioning.
+#   - SECTION 5: Clone the if template, install deps, deploy.
 #
 # Run after the bootstrap has cloned this repo:
 #   bash ~/.if/staging/scripts/setup-project
@@ -20,8 +19,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/lib"
 
 # =====================================================================
-# SECTION 1 — HTTP server (Perl-backed)
+# SECTION 1 — Logging
 # =====================================================================
+# OAuth runs out-of-process via ~/.if/bin/auth. setup-project just needs
+# its own append-only log for provisioning steps.
 
 HTTP_LOG="${HTTP_LOG:-/tmp/if-new.log}"
 
@@ -35,134 +36,13 @@ log_trunc() {
   printf '%s' "$1" | tr '\n' ' ' | cut -c1-1000
 }
 
-http_pick_port() {
-  local p
-  HTTP_PORT=0
-  for p in 50421 51284 52103 53117 54209 55327 56419 57531 58647 59761; do
-    if ! lsof -i :$p >/dev/null 2>&1; then
-      HTTP_PORT=$p; return
-    fi
-  done
-  die "no free port"
-}
-
-HTTP_PERL_SERVER='
-use IO::Socket::INET;
-$| = 1;
-my $port = $ENV{PERL_PORT} or die "PERL_PORT not set";
-my $sock = IO::Socket::INET->new(
-    LocalAddr => "127.0.0.1", LocalPort => $port, Proto => "tcp",
-    Listen => 5, ReuseAddr => 1,
-) or die "bind failed on $port: $!";
-print STDERR "listening on 127.0.0.1:$port\n";
-while (my $client = $sock->accept) {
-    $client->autoflush(1);
-    my $req = "";
-    while (sysread($client, my $buf, 4096)) {
-        $req .= $buf;
-        last if $req =~ /\r?\n\r?\n/;
-    }
-    next unless $req;
-    my ($first) = split /\r?\n/, $req;
-    my ($method, $path) = split / /, $first;
-    $method //= "GET"; $path //= "/";
-    print "$method\t$path\n";
-    my $len_line = <STDIN>;
-    last unless defined $len_line;
-    chomp $len_line;
-    my $body = "";
-    if ($len_line =~ /^(\d+)$/) {
-        my $n = $1; my $got = 0;
-        while ($got < $n) {
-            my $r = read(STDIN, my $buf, $n - $got);
-            last unless $r;
-            $body .= $buf; $got += $r;
-        }
-    }
-    my $blen = length($body);
-    print $client "HTTP/1.1 200 OK\r\n";
-    print $client "Content-Type: text/html; charset=utf-8\r\n";
-    print $client "Content-Length: $blen\r\n";
-    print $client "Connection: close\r\n\r\n";
-    print $client $body;
-    close $client;
-    print STDERR "served $method $path ($blen bytes)\n";
-}
-'
-
-http_start() {
-  : > "$HTTP_LOG"
-  http_pick_port
-  HTTP_IN=$(mktemp -u);  mkfifo "$HTTP_IN"
-  HTTP_OUT=$(mktemp -u); mkfifo "$HTTP_OUT"
-  exec 8<>"$HTTP_IN"
-  exec 7<>"$HTTP_OUT"
-  PERL_PORT="$HTTP_PORT" perl -e "$HTTP_PERL_SERVER" < "$HTTP_IN" > "$HTTP_OUT" 2>> "$HTTP_LOG" &
-  HTTP_PID=$!
-  http_log "server pid=$HTTP_PID port=$HTTP_PORT"
-  sleep 0.3
-}
-
-http_recv() {
-  IFS=$'\t' read -r REQ_METHOD REQ_PATH_QUERY <&7 || return 1
-  REQ_PATH="${REQ_PATH_QUERY%%\?*}"
-  if [[ "$REQ_PATH_QUERY" == *\?* ]]; then
-    REQ_QUERY="${REQ_PATH_QUERY#*\?}"
-  else
-    REQ_QUERY=""
-  fi
-  http_log "recv $REQ_METHOD $REQ_PATH_QUERY"
-}
-
-http_send() {
-  local body="$1"
-  local bytes
-  bytes=$(printf '%s' "$body" | wc -c | tr -d ' ')
-  printf '%d\n' "$bytes" >&8
-  printf '%s' "$body" >&8
-  http_log "send $bytes bytes"
-}
-
-http_stop() {
-  [ -z "${HTTP_PID:-}" ] && return 0
-  exec 7<&- 2>/dev/null || true
-  exec 8>&- 2>/dev/null || true
-  kill "$HTTP_PID" 2>/dev/null || true
-  wait "$HTTP_PID" 2>/dev/null || true
-  rm -f "$HTTP_IN" "$HTTP_OUT"
-  http_log "server stopped"
-  HTTP_PID=""
-}
-
 # =====================================================================
 # SECTION 2 — helpers
 # =====================================================================
 
-urlencode() {
-  local s="$1" out="" c i
-  for ((i=0; i<${#s}; i++)); do
-    c="${s:$i:1}"
-    case "$c" in
-      [a-zA-Z0-9.~_-]) out+="$c" ;;
-      ' ') out+='%20' ;;
-      *) out+=$(printf '%%%02X' "'$c") ;;
-    esac
-  done
-  printf '%s' "$out"
-}
-
-urldecode() {
-  local s="${1//+/ }"
-  printf '%b' "${s//%/\\x}"
-}
-
 json_extract() {
   grep -oE "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]+\"" | head -1 \
     | sed -E "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\1/"
-}
-
-query_param() {
-  printf '%s' "$1" | grep -oE "(^|&)$2=[^&]*" | head -1 | sed -E "s/^&?$2=//"
 }
 
 # Pull the operation `name` out of an LRO response body.
@@ -197,57 +77,6 @@ list_projects() {
     [ -n "$line" ] && EXISTING_PIDS+=("$line")
   done <<< "$pids"
   http_log "list_projects: ${#EXISTING_PIDS[@]} active project(s) found"
-  return 0
-}
-
-# Refresh the access_token in a cred file. POSTs to Google's token
-# endpoint with grant_type=refresh_token, merges the response back into
-# the file, and sets the global $ACCESS_TOKEN. Preserves the old
-# refresh_token if Google's response didn't include a new one.
-#
-# Returns 0 on success, 1 on failure (caller falls back to OAuth).
-refresh_access_token() {
-  local cred_file="$1"
-  local cid csec old_refresh email new_tokens new_access
-  cid=$(json_extract client_id < "$cred_file")
-  csec=$(json_extract client_secret < "$cred_file")
-  old_refresh=$(json_extract refresh_token < "$cred_file")
-  email=$(json_extract email < "$cred_file")
-  { [ -z "$cid" ] || [ -z "$csec" ] || [ -z "$old_refresh" ]; } && return 1
-
-  if ! new_tokens=$(curl -fsSL -X POST https://oauth2.googleapis.com/token \
-      --data-urlencode "client_id=$cid" \
-      --data-urlencode "client_secret=$csec" \
-      --data-urlencode "refresh_token=$old_refresh" \
-      --data-urlencode "grant_type=refresh_token" 2>&1); then
-    http_log "refresh_access_token: curl failed for $email: $new_tokens"
-    return 1
-  fi
-
-  new_access=$(printf '%s' "$new_tokens" | json_extract access_token)
-  [ -z "$new_access" ] && { http_log "refresh_access_token: no access_token in response for $email"; return 1; }
-
-  if ! NEW_TOKENS="$new_tokens" OLD_REFRESH="$old_refresh" \
-       EMAIL_X="$email" CID="$cid" CSEC="$csec" \
-       perl -MJSON::PP -e '
-         my $tok = decode_json($ENV{NEW_TOKENS});
-         $tok->{refresh_token} //= $ENV{OLD_REFRESH};
-         my $out = {
-           email         => $ENV{EMAIL_X},
-           client_id     => $ENV{CID},
-           client_secret => $ENV{CSEC},
-           tokens        => $tok,
-         };
-         print JSON::PP->new->pretty->canonical->encode($out);
-       ' > "$cred_file.tmp"; then
-    rm -f "$cred_file.tmp"
-    http_log "refresh_access_token: perl JSON merge failed for $email"
-    return 1
-  fi
-  mv "$cred_file.tmp" "$cred_file"
-  chmod 600 "$cred_file"
-
-  ACCESS_TOKEN="$new_access"
   return 0
 }
 
@@ -928,177 +757,13 @@ provision_all() {
 }
 
 # =====================================================================
-# SECTION 3 — Tiny HTML for the OAuth landing tab
+# SECTION 3 — sign in (delegate to ~/.if/bin/auth)
 # =====================================================================
-# Everything user-facing happens in the terminal. The browser tab only
-# needs to land somewhere after Google's redirect — these two pages
-# cover success and error.
-
-build_browser_done_html() {
-  local email="$1"
-  cat <<HTML
-<!doctype html><meta charset=utf-8><title>Signed in</title>
-<style>body{font-family:system-ui,sans-serif;max-width:540px;margin:3em auto;padding:0 1.5em;color:#333;line-height:1.55}h1{color:#0a7;font-size:1.4em}p.s{color:#888;font-size:.9em;margin-top:1.6em}</style>
-<h1>✓ Signed in</h1>
-<p>Signed in as <b>$email</b>. Return to your terminal — we'll continue setup there.</p>
-<p class=s>You can close this tab.</p>
-HTML
-}
-
-build_browser_error_html() {
-  local msg="$1"
-  cat <<HTML
-<!doctype html><meta charset=utf-8><title>Error</title>
-<style>body{font-family:system-ui,sans-serif;max-width:540px;margin:3em auto;padding:0 1.5em;color:#333;line-height:1.55}h1{color:#b33;font-size:1.4em}p.s{color:#888;font-size:.9em;margin-top:1.6em}</style>
-<h1>✗ $msg</h1>
-<p>Return to your terminal — we'll continue setup there.</p>
-<p class=s>You can close this tab.</p>
-HTML
-}
-
-# =====================================================================
-# SECTION 4 — Terminal account chooser + OAuth flow
-# =====================================================================
-
-CLIENT_ID="32555940559.apps.googleusercontent.com"
-CLIENT_SECRET="ZmssLNjJy2998hD4CTg2ejr2"
-# We use the public gcloud OAuth client. Its registered scopes don't
-# include https://www.googleapis.com/auth/firebase — requesting it
-# returns 403 restricted_client. cloud-platform alone is sufficient for
-# everything this script does via REST (cloudresourcemanager, serviceusage,
-# cloudbilling, firebase.googleapis.com, firestore.googleapis.com,
-# firebasestorage, identitytoolkit) — they all accept cloud-platform.
-SCOPE="openid email https://www.googleapis.com/auth/cloud-platform"
-
-ACCESS_TOKEN=""
-EMAIL=""
-existing_creds=()
-existing_emails=()
-CREDS_DIR="$HOME/.if/creds"
-if [ -d "$CREDS_DIR" ]; then
-  for cred_file in "$CREDS_DIR"/*.json; do
-    [ -f "$cred_file" ] || continue
-    existing_creds+=("$cred_file")
-    existing_emails+=("$(json_extract email < "$cred_file")")
-  done
-fi
-
-# Terminal account chooser. Sets PICKED_CRED to the chosen cred file path,
-# or "" when the user wants a fresh sign-in. Returns immediately with
-# PICKED_CRED="" if there are no existing creds to pick from.
-PICKED_CRED=""
-pick_account_terminal() {
-  PICKED_CRED=""
-  [ ${#existing_creds[@]} -eq 0 ] && return
-  local n choice
-  while true; do
-    echo "Which Google account?"
-    echo ""
-    n=1
-    for e in "${existing_emails[@]}"; do
-      printf "%d. %s\n" "$n" "$e"
-      n=$((n + 1))
-    done
-    printf "%d. + new account\n" "$n"
-    echo ""
-    printf "> "
-    read -r choice </dev/tty || choice=""
-    if [[ ! "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "$n" ]; then
-      printf "${C_RED}✗  pick a number 1-%d${C_RST}\n\n" "$n"
-      continue
-    fi
-    [ "$choice" -eq "$n" ] && return
-    PICKED_CRED="${existing_creds[$((choice - 1))]}"
-    return
-  done
-}
-
-# Run the full browser OAuth flow. On success: sets ACCESS_TOKEN + EMAIL
-# and writes the cred file under ~/.if/creds. On any failure: returns 1
-# with ACCESS_TOKEN unset (caller decides how to surface that).
-do_oauth() {
-  http_start
-
-  local redirect_uri scope_enc redirect_enc auth_url
-  redirect_uri="http://127.0.0.1:$HTTP_PORT"
-  scope_enc=$(urlencode "$SCOPE")
-  redirect_enc=$(urlencode "$redirect_uri")
-  auth_url="https://accounts.google.com/o/oauth2/auth?client_id=${CLIENT_ID}&redirect_uri=${redirect_enc}&response_type=code&scope=${scope_enc}&access_type=offline&prompt=consent"
-
-  chrome_open "$auth_url"
-  printf "${C_GRAY}⋯  waiting for browser sign-in${C_RST}"
-
-  local rc=1
-  while http_recv; do
-    if [ "$REQ_PATH" != "/" ]; then
-      http_send ""
-      continue
-    fi
-    if [[ "$REQ_QUERY" == *error=* ]]; then
-      local err; err=$(query_param "$REQ_QUERY" error)
-      http_send "$(build_browser_error_html "OAuth error: $err")"
-      http_log "OAuth error: $err"
-      printf "\r\033[K"
-      printf "${C_RED}✗  OAuth error: %s${C_RST}\n" "$err"
-      break
-    fi
-    if [[ "$REQ_QUERY" == *code=* ]]; then
-      local code_raw code tokens
-      code_raw=$(query_param "$REQ_QUERY" code)
-      code=$(urldecode "$code_raw")
-
-      if ! tokens=$(curl -fsSL -X POST https://oauth2.googleapis.com/token \
-          --data-urlencode "client_id=$CLIENT_ID" \
-          --data-urlencode "client_secret=$CLIENT_SECRET" \
-          --data-urlencode "code=$code" \
-          --data-urlencode "redirect_uri=$redirect_uri" \
-          --data-urlencode "grant_type=authorization_code" 2>&1); then
-        http_send "$(build_browser_error_html "Token exchange failed")"
-        http_log "token exchange failed: $tokens"
-        printf "\r\033[K"
-        printf "${C_RED}✗  token exchange failed${C_RST}\n"
-        break
-      fi
-      ACCESS_TOKEN=$(printf '%s' "$tokens" | json_extract access_token)
-      if [ -z "$ACCESS_TOKEN" ]; then
-        http_send "$(build_browser_error_html "No access token in response")"
-        printf "\r\033[K"
-        printf "${C_RED}✗  no access token in response${C_RST}\n"
-        break
-      fi
-
-      local userinfo
-      userinfo=$(curl -fsSL -H "Authorization: Bearer $ACCESS_TOKEN" \
-        https://www.googleapis.com/oauth2/v3/userinfo 2>&1) || true
-      EMAIL=$(printf '%s' "$userinfo" | json_extract email)
-      [ -z "$EMAIL" ] && EMAIL="unknown"
-
-      mkdir -p "$CREDS_DIR"
-      chmod 700 "$HOME/.if" "$CREDS_DIR"
-      local cred_path="$CREDS_DIR/${EMAIL}.json"
-      cat > "$cred_path" <<JSON
-{
-  "email": "$EMAIL",
-  "client_id": "$CLIENT_ID",
-  "client_secret": "$CLIENT_SECRET",
-  "tokens": $tokens
-}
-JSON
-      chmod 600 "$cred_path"
-
-      http_send "$(build_browser_done_html "$EMAIL")"
-      printf "\r\033[K"
-      printf "${C_GRN}✓  signed in as %s${C_RST}\n" "$EMAIL"
-      rc=0
-      break
-    fi
-    # Anything else on / — return an empty body and keep listening.
-    http_send ""
-  done
-
-  http_stop
-  return $rc
-}
+# auth runs the multi-account Google OAuth flow: opens the consent
+# screen, runs a Perl loopback server to catch the callback, writes
+# ~/.if/creds/<email>.json with the new tokens, and prints the chosen
+# email on the last line of stdout (UI to stderr). Installed by
+# scripts/install-dependencies; invokable as `auth` via the zshrc alias.
 
 echo ""
 heading "let's set up a new project"
@@ -1112,41 +777,12 @@ printf "${C_GRAY}press enter to continue${C_RST}\n"
 read -r _ </dev/tty 2>/dev/null || true
 echo ""
 
-# Make sure the perl HTTP server is cleaned up on any exit (ctrl-c, error,
-# etc.). http_start sets HTTP_PID; http_stop clears it, so this is a no-op
-# when the server isn't running.
-trap '[ -n "${HTTP_PID:-}" ] && http_stop' EXIT
+EMAIL=$("$HOME/.if/bin/auth") || die "sign-in didn't complete"
+[ -n "$EMAIL" ] || die "sign-in didn't complete"
 
-pick_account_terminal
-
-if [ -n "$PICKED_CRED" ]; then
-  EMAIL=$(json_extract email < "$PICKED_CRED")
-  if [ -z "$EMAIL" ]; then
-    echo "✗ Couldn't read email from $PICKED_CRED"
-    exit 1
-  fi
-  printf "${C_GRAY}⋯  refreshing token for %s${C_RST}" "$EMAIL"
-  if refresh_access_token "$PICKED_CRED"; then
-    printf "\r\033[K"
-    printf "${C_GRN}✓  signed in as %s${C_RST}\n" "$EMAIL"
-  else
-    printf "\r\033[K"
-    printf "${C_GRAY}token refresh failed — re-authenticating${C_RST}\n"
-    do_oauth || true
-  fi
-else
-  do_oauth || true
-fi
-
-trap - EXIT
-
-# Sign-in didn't complete (cancelled, fatal error, etc).
-if [ -z "$ACCESS_TOKEN" ] || [ -z "$EMAIL" ]; then
-  echo ""
-  echo "Sign-in didn't complete. Re-run when ready."
-  echo ""
-  exit 1
-fi
+CRED_FILE="$HOME/.if/creds/${EMAIL}.json"
+ACCESS_TOKEN=$(json_extract access_token < "$CRED_FILE")
+[ -n "$ACCESS_TOKEN" ] || die "couldn't read access_token from $CRED_FILE"
 
 # Preflight (open billing account) gates further provisioning. Firebase
 # ToS gets caught later in add_firebase via PREFLIGHT_REASON=no_firebase_tos.
@@ -1156,7 +792,7 @@ if ! preflight_check; then
 fi
 
 # =====================================================================
-# SECTION 5 — Terminal project chooser + provisioning
+# SECTION 4 — Terminal project chooser + provisioning
 # =====================================================================
 
 echo ""
@@ -1254,7 +890,7 @@ if ! provision_all; then
 fi
 
 # =====================================================================
-# SECTION 7 — Clone the if template, install deps, deploy
+# SECTION 5 — Clone the if template, install deps, deploy
 # =====================================================================
 # Drops a fresh checkout into ${PROJECT_DIR}/<pid> (PROJECT_DIR comes
 # from ~/.zshrc — set by scripts/install-dependencies, default
@@ -1316,6 +952,7 @@ _clone_template() {
 _strip_template_only() {
   cd "$PROJECT_PATH"
   rm -f AUTHORING.md \
+        scripts/auth \
         scripts/install-dependencies \
         scripts/setup-project \
         scripts/setup-project-bootstrap \

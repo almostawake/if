@@ -1,0 +1,311 @@
+#!/bin/bash
+#
+# auth — multi-account Google OAuth login, like
+# `gcloud auth application-default login` but storing creds at
+# ~/.if/creds/<email>.json (one file per account).
+#
+# Perl loopback OAuth flow lifted from ~/.if/staging/scripts/setup-project.
+# No terminal picker — Google's consent screen already picks the account,
+# and we name the cred file after whatever email it returns.
+#
+set -e
+
+# --- colors ---
+if [ -t 1 ]; then
+  C_RED=$'\033[31m'; C_GRN=$'\033[38;5;22m'; C_GRAY=$'\033[90m'; C_RST=$'\033[0m'
+else
+  C_RED=""; C_GRN=""; C_GRAY=""; C_RST=""
+fi
+die() { printf "${C_RED}error:${C_RST} %s\n" "$*" >&2; exit 1; }
+
+# --- HTTP server (Perl-backed loopback) ---
+
+HTTP_LOG="${HTTP_LOG:-/tmp/if-auth.log}"
+
+http_log() {
+  printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >> "$HTTP_LOG"
+}
+
+http_pick_port() {
+  local p
+  HTTP_PORT=0
+  for p in 50421 51284 52103 53117 54209 55327 56419 57531 58647 59761; do
+    if ! lsof -i :$p >/dev/null 2>&1; then
+      HTTP_PORT=$p; return
+    fi
+  done
+  die "no free port"
+}
+
+HTTP_PERL_SERVER='
+use IO::Socket::INET;
+$| = 1;
+my $port = $ENV{PERL_PORT} or die "PERL_PORT not set";
+my $sock = IO::Socket::INET->new(
+    LocalAddr => "127.0.0.1", LocalPort => $port, Proto => "tcp",
+    Listen => 5, ReuseAddr => 1,
+) or die "bind failed on $port: $!";
+print STDERR "listening on 127.0.0.1:$port\n";
+while (my $client = $sock->accept) {
+    $client->autoflush(1);
+    my $req = "";
+    while (sysread($client, my $buf, 4096)) {
+        $req .= $buf;
+        last if $req =~ /\r?\n\r?\n/;
+    }
+    next unless $req;
+    my ($first) = split /\r?\n/, $req;
+    my ($method, $path) = split / /, $first;
+    $method //= "GET"; $path //= "/";
+    print "$method\t$path\n";
+    my $len_line = <STDIN>;
+    last unless defined $len_line;
+    chomp $len_line;
+    my $body = "";
+    if ($len_line =~ /^(\d+)$/) {
+        my $n = $1; my $got = 0;
+        while ($got < $n) {
+            my $r = read(STDIN, my $buf, $n - $got);
+            last unless $r;
+            $body .= $buf; $got += $r;
+        }
+    }
+    my $blen = length($body);
+    print $client "HTTP/1.1 200 OK\r\n";
+    print $client "Content-Type: text/html; charset=utf-8\r\n";
+    print $client "Content-Length: $blen\r\n";
+    print $client "Connection: close\r\n\r\n";
+    print $client $body;
+    close $client;
+    print STDERR "served $method $path ($blen bytes)\n";
+}
+'
+
+http_start() {
+  : > "$HTTP_LOG"
+  http_pick_port
+  HTTP_IN=$(mktemp -u);  mkfifo "$HTTP_IN"
+  HTTP_OUT=$(mktemp -u); mkfifo "$HTTP_OUT"
+  exec 8<>"$HTTP_IN"
+  exec 7<>"$HTTP_OUT"
+  PERL_PORT="$HTTP_PORT" perl -e "$HTTP_PERL_SERVER" < "$HTTP_IN" > "$HTTP_OUT" 2>> "$HTTP_LOG" &
+  HTTP_PID=$!
+  http_log "server pid=$HTTP_PID port=$HTTP_PORT"
+  sleep 0.3
+}
+
+http_recv() {
+  IFS=$'\t' read -r REQ_METHOD REQ_PATH_QUERY <&7 || return 1
+  REQ_PATH="${REQ_PATH_QUERY%%\?*}"
+  if [[ "$REQ_PATH_QUERY" == *\?* ]]; then
+    REQ_QUERY="${REQ_PATH_QUERY#*\?}"
+  else
+    REQ_QUERY=""
+  fi
+  http_log "recv $REQ_METHOD $REQ_PATH_QUERY"
+}
+
+http_send() {
+  local body="$1"
+  local bytes
+  bytes=$(printf '%s' "$body" | wc -c | tr -d ' ')
+  printf '%d\n' "$bytes" >&8
+  printf '%s' "$body" >&8
+  http_log "send $bytes bytes"
+}
+
+http_stop() {
+  [ -z "${HTTP_PID:-}" ] && return 0
+  exec 7<&- 2>/dev/null || true
+  exec 8>&- 2>/dev/null || true
+  kill "$HTTP_PID" 2>/dev/null || true
+  wait "$HTTP_PID" 2>/dev/null || true
+  rm -f "$HTTP_IN" "$HTTP_OUT"
+  http_log "server stopped"
+  HTTP_PID=""
+}
+
+# --- helpers ---
+
+urlencode() {
+  local s="$1" out="" c i
+  for ((i=0; i<${#s}; i++)); do
+    c="${s:$i:1}"
+    case "$c" in
+      [a-zA-Z0-9.~_-]) out+="$c" ;;
+      ' ') out+='%20' ;;
+      *) out+=$(printf '%%%02X' "'$c") ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+urldecode() {
+  local s="${1//+/ }"
+  printf '%b' "${s//%/\\x}"
+}
+
+json_extract() {
+  grep -oE "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]+\"" | head -1 \
+    | sed -E "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\1/"
+}
+
+query_param() {
+  printf '%s' "$1" | grep -oE "(^|&)$2=[^&]*" | head -1 | sed -E "s/^&?$2=//"
+}
+
+# --- HTML ---
+
+build_browser_done_html() {
+  local email="$1"
+  cat <<HTML
+<!doctype html><meta charset=utf-8><title>Signed in</title>
+<style>body{font-family:system-ui,sans-serif;max-width:540px;margin:3em auto;padding:0 1.5em;color:#333;line-height:1.55}h1{color:#0a7;font-size:1.4em}p.s{color:#888;font-size:.9em;margin-top:1.6em}</style>
+<h1>✓ Signed in</h1>
+<p>Signed in as <b>$email</b>. Return to your terminal.</p>
+<p class=s>You can close this tab.</p>
+HTML
+}
+
+build_browser_error_html() {
+  local msg="$1"
+  cat <<HTML
+<!doctype html><meta charset=utf-8><title>Error</title>
+<style>body{font-family:system-ui,sans-serif;max-width:540px;margin:3em auto;padding:0 1.5em;color:#333;line-height:1.55}h1{color:#b33;font-size:1.4em}p.s{color:#888;font-size:.9em;margin-top:1.6em}</style>
+<h1>✗ $msg</h1>
+<p>Return to your terminal.</p>
+<p class=s>You can close this tab.</p>
+HTML
+}
+
+# --- browser opener (Chrome-with-Claude launcher if present, else default) ---
+
+chrome_open() {
+  local url="$1"
+  local launcher="$HOME/Applications/Chrome with Claude Code.app/Contents/MacOS/Chrome with Claude Code"
+  if [ -x "$launcher" ]; then
+    "$launcher" "$url" >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+    return 0
+  fi
+  if command -v open >/dev/null 2>&1; then
+    open "$url"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url"
+  fi
+}
+
+# --- OAuth ---
+
+CLIENT_ID="32555940559.apps.googleusercontent.com"
+CLIENT_SECRET="ZmssLNjJy2998hD4CTg2ejr2"
+# We use the public gcloud OAuth client. Its registered scopes don't
+# include https://www.googleapis.com/auth/firebase — requesting it
+# returns 403 restricted_client. cloud-platform alone is sufficient.
+SCOPE="openid email https://www.googleapis.com/auth/cloud-platform"
+
+ACCESS_TOKEN=""
+EMAIL=""
+CREDS_DIR="$HOME/.if/creds"
+
+# Run the full browser OAuth flow. On success: sets ACCESS_TOKEN + EMAIL
+# and writes the cred file under ~/.if/creds. On any failure: returns 1
+# with ACCESS_TOKEN unset (caller decides how to surface that).
+do_oauth() {
+  http_start
+
+  local redirect_uri scope_enc redirect_enc auth_url
+  redirect_uri="http://127.0.0.1:$HTTP_PORT"
+  scope_enc=$(urlencode "$SCOPE")
+  redirect_enc=$(urlencode "$redirect_uri")
+  auth_url="https://accounts.google.com/o/oauth2/auth?client_id=${CLIENT_ID}&redirect_uri=${redirect_enc}&response_type=code&scope=${scope_enc}&access_type=offline&prompt=consent"
+
+  chrome_open "$auth_url"
+  printf "${C_GRAY}⋯  waiting for browser sign-in${C_RST}" >&2
+
+  local rc=1
+  while http_recv; do
+    if [ "$REQ_PATH" != "/" ]; then
+      http_send ""
+      continue
+    fi
+    if [[ "$REQ_QUERY" == *error=* ]]; then
+      local err; err=$(query_param "$REQ_QUERY" error)
+      http_send "$(build_browser_error_html "OAuth error: $err")"
+      http_log "OAuth error: $err"
+      printf "\r\033[K" >&2
+      printf "${C_RED}✗  OAuth error: %s${C_RST}\n" "$err" >&2
+      break
+    fi
+    if [[ "$REQ_QUERY" == *code=* ]]; then
+      local code_raw code tokens
+      code_raw=$(query_param "$REQ_QUERY" code)
+      code=$(urldecode "$code_raw")
+
+      if ! tokens=$(curl -fsSL -X POST https://oauth2.googleapis.com/token \
+          --data-urlencode "client_id=$CLIENT_ID" \
+          --data-urlencode "client_secret=$CLIENT_SECRET" \
+          --data-urlencode "code=$code" \
+          --data-urlencode "redirect_uri=$redirect_uri" \
+          --data-urlencode "grant_type=authorization_code" 2>&1); then
+        http_send "$(build_browser_error_html "Token exchange failed")"
+        http_log "token exchange failed: $tokens"
+        printf "\r\033[K" >&2
+        printf "${C_RED}✗  token exchange failed${C_RST}\n" >&2
+        break
+      fi
+      ACCESS_TOKEN=$(printf '%s' "$tokens" | json_extract access_token)
+      if [ -z "$ACCESS_TOKEN" ]; then
+        http_send "$(build_browser_error_html "No access token in response")"
+        printf "\r\033[K" >&2
+        printf "${C_RED}✗  no access token in response${C_RST}\n" >&2
+        break
+      fi
+
+      local userinfo
+      userinfo=$(curl -fsSL -H "Authorization: Bearer $ACCESS_TOKEN" \
+        https://www.googleapis.com/oauth2/v3/userinfo 2>&1) || true
+      EMAIL=$(printf '%s' "$userinfo" | json_extract email)
+      [ -z "$EMAIL" ] && EMAIL="unknown"
+
+      mkdir -p "$CREDS_DIR"
+      chmod 700 "$HOME/.if" "$CREDS_DIR"
+      local cred_path="$CREDS_DIR/${EMAIL}.json"
+      cat > "$cred_path" <<JSON
+{
+  "email": "$EMAIL",
+  "client_id": "$CLIENT_ID",
+  "client_secret": "$CLIENT_SECRET",
+  "tokens": $tokens
+}
+JSON
+      chmod 600 "$cred_path"
+
+      http_send "$(build_browser_done_html "$EMAIL")"
+      printf "\r\033[K" >&2
+      printf "${C_GRN}✓  signed in as %s${C_RST}\n" "$EMAIL" >&2
+      rc=0
+      break
+    fi
+    # Anything else on / — return an empty body and keep listening.
+    http_send ""
+  done
+
+  http_stop
+  return $rc
+}
+
+# --- main ---
+
+trap '[ -n "${HTTP_PID:-}" ] && http_stop' EXIT
+
+do_oauth || die "sign-in didn't complete"
+
+trap - EXIT
+
+[ -n "$ACCESS_TOKEN" ] && [ -n "$EMAIL" ] || die "sign-in didn't complete"
+
+# Stdout contract: chosen email on the last line. All UI above went to
+# stderr so callers can do EMAIL=$(auth) cleanly.
+printf '%s\n' "$EMAIL"
+exit 0
