@@ -18,32 +18,22 @@
 //
 // Inputs (in priority order):
 //   PROJECT_ID            from .env (required)  — the GCP/Firebase project id
-//   ACCOUNT_EMAIL         .env / env (optional) — which Google account to deploy as
 //   GOOGLE_ACCESS_TOKEN   env var (optional)    — explicit token (used by setup-project's first-deploy)
 //   PROJECT_SITE          .env / env (optional) — Firebase Hosting site (default: PROJECT_ID)
 //   PUBLIC_DIR            .env / env (optional) — built static dir   (default: client/build)
 //   RULES_FILE            .env / env (optional) — firestore rules    (default: firestore.rules)
 //
-// Token resolution (in order; first hit wins):
-//   1. GOOGLE_ACCESS_TOKEN env var        — explicit override.
-//   2. ~/.if/creds/<ACCOUNT_EMAIL>.json   — the if-tooling cred store written by
-//                                           setup-project's OAuth flow. We read the
-//                                           access_token, probe userinfo, and
-//                                           refresh via refresh_token if the probe
-//                                           401s. New tokens are written back
-//                                           atomically. Per ~/.if/creds/CLAUDE.md:
-//                                           NEVER re-prompt for OAuth just because
-//                                           access_token expired.
-//   3. gcloud auth print-access-token --account=$ACCOUNT_EMAIL  — dev-machine
-//                                           fallback when the if cred store
-//                                           isn't populated.
+// Auth: delegates to scripts/auth.mjs (project-local cred at .env.auth.json).
+// auth.mjs handles probe / refresh / grant transparently — deploy just
+// awaits a valid token and proceeds. If GOOGLE_ACCESS_TOKEN is set,
+// auth.mjs is skipped entirely (used by setup-project's first deploy).
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
+import { ensureValidToken } from './auth.mjs';
 
 // Minimal .env loader: KEY=VALUE per line, # comments, optional surrounding
 // quotes. Existing process.env entries win, so callers can override.
@@ -77,94 +67,16 @@ const site = process.env.PROJECT_SITE || project;
 const publicDir = process.env.PUBLIC_DIR || 'client/build';
 const rulesFile = process.env.RULES_FILE || 'firestore.rules';
 
-// Read ~/.if/creds/<email>.json, probe the access_token, refresh it if expired,
-// write the new tokens back atomically. Returns a fresh access_token, or null
-// if the cred file doesn't exist. Throws on hard failures (refresh_token revoked,
-// I/O errors), so the caller gets a clear stop rather than silent fallthrough.
-async function tokenFromCredFile(email) {
-  const credPath = path.join(os.homedir(), '.if', 'creds', `${email}.json`);
-  if (!fs.existsSync(credPath)) return null;
-  const cred = JSON.parse(fs.readFileSync(credPath, 'utf8'));
-  const stored = cred.tokens?.access_token;
-
-  // Cheap validity probe — same endpoint ~/.if/creds/CLAUDE.md recommends.
-  if (stored) {
-    const probe = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${stored}` }
-    });
-    if (probe.ok) return stored;
-    if (probe.status !== 401 && probe.status !== 403) {
-      throw new Error(`unexpected ${probe.status} probing access_token: ${(await probe.text()).slice(0, 300)}`);
-    }
-    // 401/403 → fall through to refresh.
-  }
-
-  const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: cred.client_id,
-      client_secret: cred.client_secret,
-      refresh_token: cred.tokens.refresh_token,
-      grant_type: 'refresh_token'
-    })
-  });
-  const refreshText = await refreshRes.text();
-  if (!refreshRes.ok) {
-    if (refreshRes.status === 400 && /invalid_grant/.test(refreshText)) {
-      throw new Error(
-        `refresh_token revoked for ${email} (Google returned invalid_grant). ` +
-        `Re-run setup-project (or re-OAuth manually) to mint a new one.`
-      );
-    }
-    throw new Error(`token refresh failed (${refreshRes.status}): ${refreshText.slice(0, 300)}`);
-  }
-  const newTokens = JSON.parse(refreshText);
-  // Google sometimes omits a fresh refresh_token in the response — preserve the old one.
-  if (!newTokens.refresh_token) newTokens.refresh_token = cred.tokens.refresh_token;
-
-  // Atomic write-back: tmp + chmod + rename, so a crash mid-write can't leave
-  // a corrupt cred file.
-  const updated = { ...cred, tokens: newTokens };
-  const tmp = `${credPath}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(updated, null, 2));
-  fs.chmodSync(tmp, 0o600);
-  fs.renameSync(tmp, credPath);
-
-  return newTokens.access_token;
-}
-
-const accountEmail = process.env.ACCOUNT_EMAIL || '';
 let accessToken = process.env.GOOGLE_ACCESS_TOKEN;
 let tokenSource = accessToken ? 'env:GOOGLE_ACCESS_TOKEN' : '';
 
-if (!accessToken && accountEmail) {
+if (!accessToken) {
   try {
-    const t = await tokenFromCredFile(accountEmail);
-    if (t) { accessToken = t; tokenSource = `~/.if/creds/${accountEmail}.json`; }
+    accessToken = await ensureValidToken();
+    tokenSource = '.env.auth.json';
   } catch (e) {
     console.error(`error: ${e.message}`);
-    process.exit(2);
-  }
-}
-
-if (!accessToken) {
-  // dev-machine fallback: gcloud. Fine on workstations that have gcloud
-  // installed and `gcloud auth login`'d the right account.
-  const cmd = accountEmail
-    ? `gcloud auth print-access-token --account=${accountEmail}`
-    : 'gcloud auth print-access-token';
-  try {
-    accessToken = execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-    tokenSource = `gcloud${accountEmail ? `:${accountEmail}` : ''}`;
-  } catch {
-    console.error(`error: no token available for ${accountEmail || '(no ACCOUNT_EMAIL)'}.`);
-    console.error('  tried: $GOOGLE_ACCESS_TOKEN, ~/.if/creds/<email>.json, gcloud.');
-    if (accountEmail) {
-      console.error(`  fix:   re-run setup-project, or \`gcloud auth login ${accountEmail}\`.`);
-    } else {
-      console.error('  fix:   set ACCOUNT_EMAIL in .env, then re-run.');
-    }
+    console.error('  fix: run `node scripts/auth.mjs` to authenticate.');
     process.exit(2);
   }
 }

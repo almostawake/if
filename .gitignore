@@ -14,10 +14,16 @@ ui-debug.log
 .env
 .env.local
 .env.*.local
+# Per-project Google OAuth cred (written by scripts/auth.mjs). Holds a
+# refresh_token — never commit.
+.env.auth.json
 # Deployment-specific Firebase Web config — written per-project at deploy
 # time, not template-generic.
 client/.env.production
 client/.env
+
+# Firebase emulator persistence (--export-on-exit / --import target).
+emulator-data/
 
 # OS
 .DS_Store
