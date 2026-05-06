@@ -2,7 +2,7 @@
 //
 // PreToolUse hook for Bash. Blocks direct invocations of firebase /
 // firebase-tools / gcloud login commands so they don't shadow this
-// template's auth flow (scripts/auth.mjs writing to .env.auth.json).
+// template's auth flow (cmd-auth.mjs writing to .env.auth.json).
 //
 // Allowed: firebase emulators:*, gcloud auth list / print-access-token /
 // revoke / etc. — only the *login* sub-commands are blocked.
@@ -22,8 +22,8 @@ const BLOCKED = /(firebase|firebase-tools)\s+login|gcloud\s+auth\s+(application-
 
 if (BLOCKED.test(cmd)) {
   console.error(
-    "Blocked: this template manages Google OAuth via scripts/auth.mjs " +
-    "(project-local cred at .env.auth.json). Run 'node scripts/auth.mjs' " +
+    "Blocked: this template manages Google OAuth via cmd-auth.mjs " +
+    "(project-local cred at .env.auth.json). Run 'node cmd-auth.mjs' " +
     "instead. firebase emulators commands are unaffected."
   );
   process.exit(2);

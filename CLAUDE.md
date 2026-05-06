@@ -1,7 +1,3 @@
-<!-- @author-only:start -->
-> **Authoring this template?** Read `AUTHORING.md` before touching `scripts/setup-project`, the install/clone lifecycle, or anything labelled template-only — and keep template-only prose in `AUTHORING.md`, not here.
-<!-- @author-only:end -->
-
 # Purpose
 
 Fast-track small automation solutions for non-developers.
@@ -12,20 +8,17 @@ Read the relevant topic file before working in its area:
 - **docs/CLAUDE-STACK.md** — target tech stack and architecture, stick to these technologies, they are all pre-provisioned
 - **docs/CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
 
-## Personal state (~/.if)
-- Before any GCP / Firebase / Google OAuth work, read `~/.if/CLAUDE.md` (scratch+tooling dir) and `~/.if/creds/CLAUDE.md` (credential contract — auto-refresh expired access tokens, never re-prompt for OAuth because of expiry).
-
 ## Non-technical Audience
 
 The target user is a non-developer — a business analyst, project manager, or team lead building small personal-automation tools with Claude Code. Assume they do not know OAuth, serverless, or Firestore modelling; keep jargon to a minimum and offer to explain. When they ask for specific technology, clarify the functional requirement first rather than taking the technical direction at face value.
 
 ## Auth default
 
-The template ships with **Firebase Auth Email Link sign-in** + an `allowedEmails` whitelist in Firestore. Flow: user enters email → gets a magic link by email → clicks it → signed in. They're only let through if their lowercased email exists in `/allowedEmails/{email}`. The project owner's email is seeded by `setup-project` so they can use the app on day one; they then add/remove others from the in-app users page.
+The template ships with **Firebase Auth Email Link sign-in** + an `allowedEmails` whitelist in Firestore. Flow: user enters email → gets a magic link by email → clicks it → signed in. They're only let through if their lowercased email exists in `/allowedEmails/{email}`. The project owner's email must be seeded there before first login; from then on they add/remove others from the in-app users page.
 
 Don't add Google OAuth, password auth, or other providers without asking. Email Link + whitelist is the chosen pattern: zero passwords, no consent-screen setup, easy to administrate. Point users here if they ask for "logins".
 
-**On the Firebase Web "API key" (`AIzaSy…`) in `client/.env.production`:** it's a misnamed *public project identifier*, not a credential — see [Firebase docs](https://firebase.google.com/docs/projects/api-keys). Safe to ship in the bundle. Real auth is Firebase Auth ID tokens + Firestore security rules. `setup-project` writes this file post-clone via the Firebase Management API; never commit it (gitignored).
+**On the Firebase Web "API key" (`AIzaSy…`) in `client/.env`:** it's a misnamed *public project identifier*, not a credential — see [Firebase docs](https://firebase.google.com/docs/projects/api-keys). Safe to ship in the bundle. Real auth is Firebase Auth ID tokens + Firestore security rules. The file holds project-specific Firebase Web config (`VITE_FIREBASE_*`); seed it from your project's Firebase console (or the bootstrap of your choice) before deploying. Gitignored — never commit.
 
 **`signInWithRedirect` gotcha (if you ever add a redirect-based provider):** breaks in Chrome under third-party cookie restrictions. Fix in the prod Firebase config: `authDomain = window.location.host` (same-origin redirect) + call `getRedirectResult(auth)` on init. Otherwise users land back on the login screen after selecting their account.
 
@@ -102,9 +95,10 @@ const data = await res.json();
 
 ## Deploying
 
-- **Use `node scripts/deploy.mjs` for ALL deploys.** Do NOT run `firebase deploy`, `firebase-tools`, or any other deploy path — they fail under our auth model (gcloud's shared OAuth client can't grant the Firebase scope, and Cloud Identity Free orgs disable service-account keys). `scripts/deploy.mjs` calls the underlying REST APIs directly with the access token we already have. Header comment in the script has the full reasoning.
-- The script reads **`PROJECT_ID`** and **`ACCOUNT_EMAIL`** from a root **`.env`** (gitignored — written per-machine by `setup-project`). Deliberate 1:1 mapping between checkout and target project — no dev/test/prod split for this template's audience.
-- If `.env` is missing or you need to retarget, write it manually: `PROJECT_ID=<gcp-project-id>` and `ACCOUNT_EMAIL=<gcloud-account-email>`. The script falls back to `gcloud auth print-access-token --account=$ACCOUNT_EMAIL` for the token.
+- **Use `node cmd-deploy.mjs` for ALL deploys.** Do NOT run `firebase deploy`, `firebase-tools`, or any other deploy path — they fail under our auth model (gcloud's shared OAuth client can't grant the Firebase scope, and Cloud Identity Free orgs disable service-account keys). `cmd-deploy.mjs` calls the underlying REST APIs directly with the access token we already have. Header comment in the script has the full reasoning.
+- The script reads **`PROJECT_ID`** from a root **`.env`** (gitignored). Deliberate 1:1 mapping between checkout and target project — no dev/test/prod split for this template's audience.
+- If `.env` is missing or you need to retarget, write it manually: `PROJECT_ID=<gcp-project-id>`.
+- For (re)authentication run `node cmd-auth.mjs` — handles probe / refresh / fresh consent transparently. Cred lives at `.env.auth.json` (gitignored).
 - The script **builds first** (`npm run build:all`), then pushes — no separate build step needed.
 
 ## Data model conventions

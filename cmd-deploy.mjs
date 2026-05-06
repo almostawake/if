@@ -14,7 +14,7 @@
 //   exactly what firebase-tools and SA-auth ultimately do anyway.
 //
 // Usage:
-//   node scripts/deploy.mjs           # everything from .env + defaults
+//   node cmd-deploy.mjs           # everything from .env + defaults
 //
 // Inputs (in priority order):
 //   PROJECT_ID            from .env (required)  — the GCP/Firebase project id
@@ -23,7 +23,7 @@
 //   PUBLIC_DIR            .env / env (optional) — built static dir   (default: client/build)
 //   RULES_FILE            .env / env (optional) — firestore rules    (default: firestore.rules)
 //
-// Auth: delegates to scripts/auth.mjs (project-local cred at .env.auth.json).
+// Auth: delegates to cmd-auth.mjs (project-local cred at .env.auth.json).
 // auth.mjs handles probe / refresh / grant transparently — deploy just
 // awaits a valid token and proceeds. If GOOGLE_ACCESS_TOKEN is set,
 // auth.mjs is skipped entirely (used by setup-project's first deploy).
@@ -33,7 +33,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
-import { ensureValidToken } from './auth.mjs';
+import { ensureValidToken } from './cmd-auth.mjs';
 
 // Minimal .env loader: KEY=VALUE per line, # comments, optional surrounding
 // quotes. Existing process.env entries win, so callers can override.
@@ -76,7 +76,7 @@ if (!accessToken) {
     tokenSource = '.env.auth.json';
   } catch (e) {
     console.error(`error: ${e.message}`);
-    console.error('  fix: run `node scripts/auth.mjs` to authenticate.');
+    console.error('  fix: run `node cmd-auth.mjs` to authenticate.');
     process.exit(2);
   }
 }

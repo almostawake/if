@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 //
-// auth.mjs — ensure a valid Google OAuth access_token in .env.auth.json.
+// cmd-auth.mjs — ensure a valid Google OAuth access_token in .env.auth.json.
 //
 // Single entry point for token validity. Replaces the historical split
 // between ~/.if/bin/auth (grant-only, bash) and inline refresh logic
-// that lived in scripts/deploy.mjs. Callers don't have to know whether
+// that lived in cmd-deploy.mjs. Callers don't have to know whether
 // a probe, a refresh, or a fresh consent flow is required.
 //
 // Behavior:
@@ -14,10 +14,10 @@
 //   4. On 400 invalid_grant → grant flow.
 //   5. Other refresh failures → throw (network, 5xx, etc.).
 //
-// Library:  import { ensureValidToken } from './auth.mjs'
-// CLI:      node scripts/auth.mjs            ensure valid (probe → refresh → grant)
-//           node scripts/auth.mjs --status   probe-only, never opens browser
-//           node scripts/auth.mjs --force    skip checks, force fresh grant
+// Library:  import { ensureValidToken } from './cmd-auth.mjs'
+// CLI:      node cmd-auth.mjs            ensure valid (probe → refresh → grant)
+//           node cmd-auth.mjs --status   probe-only, never opens browser
+//           node cmd-auth.mjs --force    skip checks, force fresh grant
 //
 // Storage:  <project>/.env.auth.json (chmod 600, gitignored). Sorts
 // adjacent to .env in directory listings. Schema matches the historical
@@ -44,7 +44,7 @@ const HTTP_TIMEOUT_MS = 25_000;
 const BROWSER_TIMEOUT_FIRST_MS = 60_000;
 const BROWSER_TIMEOUT_REPEAT_MS = 25_000;
 
-const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const CRED_PATH = path.join(PROJECT_ROOT, '.env.auth.json');
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';

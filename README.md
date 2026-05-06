@@ -2,74 +2,30 @@
 
 you're in.
 
-`if` (impatient futurist) is a starter kit for personal automation tools — sveltekit + firebase + cloud functions + gemini, with everything provisioned in a single command.
+`if` (impatient futurist) is a starter template for personal automation tools — sveltekit + firebase + cloud functions + gemini.
 
-## before you start
+## start
 
-you should already have:
+1. copy this folder to your projects dir (remove `.git` if you want a fresh history).
+2. seed `.env` (see `.env.example`) with `PROJECT_ID=<gcp-project-id>`.
+3. seed `client/.env` with the Firebase Web config (`VITE_FIREBASE_*` keys) from your Firebase console.
+4. `node cmd-auth.mjs` once — Google OAuth consent in the browser. Writes `.env.auth.json`.
+5. `npm run install:all` to install dependencies.
+6. `npm run start:emulators` + `npm run start:client` for local dev (ports 4000 + 5173).
+7. `node cmd-deploy.mjs` to ship.
 
-- a dedicated gmail account for this project
-- a dedicated macos user account on the machine you'll work from
-- google cloud free trial enabled on that gmail ([console.cloud.google.com/freetrial](https://console.cloud.google.com/freetrial))
+## prerequisites
 
-if any of those are missing, do them now and come back.
+- a gmail account with billing enabled
+- an existing GCP project with Firebase, Firestore, Storage, Auth, and Cloud Functions provisioned
 
-## install
-
-sign into your dedicated macos user, open `Terminal.app`, and run:
-
-```sh
-curl -fsSL https://almostawake.com/i.sh | bash
-```
-
-this will:
-- install homebrew (asks for your sudo password once)
-- install gh and sign you into github
-- clone this repo to `~/.if/staging`
-- install node, java, claude code, chrome with claude
-- set up the **IF Terminal** preset
-
-takes about 5 minutes. follow the prompts as they appear.
-
-## create your first app
-
-after install finishes, run:
-
-```sh
-bash ~/.if/staging/scripts/setup-project
-```
-
-this will:
-- sign you into google cloud (browser flow)
-- create (or reuse) a gcp project
-- provision firebase, firestore, storage, auth, cloud functions, gemini api
-- clone a fresh copy of the template into `~/projects/<your-project-id>`
-- open vs code on it
-
-you can run this again anytime to spin up another project.
-
-## something went wrong?
-
-### "failed to add firebase to the project"
-
-This means your gmail account hasn't accepted the Firebase terms & conditions yet. Fix:
-
-1. Open [console.firebase.google.com](https://console.firebase.google.com/) signed in as the same gmail you used in the script.
-2. Click **Create a project** (or **Add project**).
-3. Use any name — e.g. `nothing-yet`. We won't use this project, it's just to trigger ToS acceptance.
-4. Click through the prompts. Accept the free trial / Blaze upgrade if asked.
-5. Once the project finishes creating, return to your terminal and run `setup-project` again.
-
-### other issues
-
-- install issues: `tail -100 /tmp/if-install.log`
-- email [andrew@almostawake.com](mailto:andrew@almostawake.com) with what you saw
+bootstrap tooling that sets all that up automatically lives in `../aa-migrate` (separate, in flux).
 
 ## what lives in this repo
 
-- `scripts/` — install + new + helper shell scripts
-- `client/` — the sveltekit dashboard template (cloned per-project)
-- `functions/` — cloud functions template
-- `CLAUDE-*.md` — agent instructions for claude code (modifying the template itself)
-
-you don't need to read any of those to use the kit — the install and new scripts handle everything.
+- `client/` — the sveltekit dashboard
+- `functions/` — cloud functions
+- `cmd-auth.mjs` — Google OAuth (probe / refresh / fresh consent)
+- `cmd-deploy.mjs` — Firebase Hosting + Firestore Rules deploy via REST
+- `CLAUDE.md`, `docs/CLAUDE-*.md` — agent instructions for Claude Code
+- `.claude/` — agent settings + hooks
