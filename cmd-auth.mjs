@@ -18,6 +18,7 @@
 // CLI:      node cmd-auth.mjs            ensure valid (probe → refresh → grant)
 //           node cmd-auth.mjs --status   probe-only, never opens browser
 //           node cmd-auth.mjs --force    skip checks, force fresh grant
+//           node cmd-auth.mjs --token    after ensuring valid, print access_token to stdout
 //
 // Storage:  <project>/.env.auth.json (chmod 600, gitignored). Sorts
 // adjacent to .env in directory listings. Schema matches the historical
@@ -256,6 +257,7 @@ if (isMain) {
   const args = process.argv.slice(2);
   const force = args.includes('--force');
   const status = args.includes('--status');
+  const wantsToken = args.includes('--token');
 
   if (status) {
     const cred = readCred();
@@ -283,7 +285,8 @@ if (isMain) {
   }
 
   try {
-    await ensureValidToken({ force });
+    const token = await ensureValidToken({ force });
+    if (wantsToken) console.log(token);
     process.exit(0);
   } catch (e) {
     console.error(`error: ${e.message}`);

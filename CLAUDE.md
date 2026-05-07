@@ -12,6 +12,20 @@ Read the relevant topic file before working in its area:
 
 The target user is a non-developer — a business analyst, project manager, or team lead building small personal-automation tools with Claude Code. Assume they do not know OAuth, serverless, or Firestore modelling; keep jargon to a minimum and offer to explain. When they ask for specific technology, clarify the functional requirement first rather than taking the technical direction at face value.
 
+## Authenticated GCP / Firebase work
+
+For ANY GCP or Firebase REST/admin call from this project — listing projects, reading Firestore, calling Cloud Functions admin APIs, looking at logs, deploying, anything that needs a Google bearer token — use the OAuth token at `.env.auth.json` via `cmd-auth.mjs`. Do **not** reach for `gcloud` or `firebase` CLIs; their auth state is separate from this project's, usually stale, and re-authenticating them is blocked by `.claude/hooks/` for a reason.
+
+Canonical pattern (works for any `*.googleapis.com` REST API the user has Owner on):
+
+```sh
+TOKEN=$(node cmd-auth.mjs --token)
+curl -s -H "Authorization: Bearer $TOKEN" \
+  https://cloudresourcemanager.googleapis.com/v1/projects | jq .
+```
+
+`cmd-auth.mjs --token` probes / refreshes / re-grants as needed (logs to stderr), then prints the access_token to stdout. Non-zero exit on failure so callers can error-check. Don't suggest the user run `gcloud auth login` or `firebase login` either — they'd be re-authenticating a separate auth state, not this project's.
+
 ## Auth default
 
 The template ships with **Firebase Auth Email Link sign-in** + an `allowedEmails` whitelist in Firestore. Flow: user enters email → gets a magic link by email → clicks it → signed in. They're only let through if their lowercased email exists in `/allowedEmails/{email}`. The project owner's email must be seeded there before first login; from then on they add/remove others from the in-app users page.
