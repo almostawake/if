@@ -2,10 +2,8 @@
 //
 // cmd-auth.mjs — ensure a valid Google OAuth access_token in .env.auth.json.
 //
-// Single entry point for token validity. Replaces the historical split
-// between ~/.if/bin/auth (grant-only, bash) and inline refresh logic
-// that lived in cmd-deploy.mjs. Callers don't have to know whether
-// a probe, a refresh, or a fresh consent flow is required.
+// Single entry point for token validity. Callers don't have to know
+// whether a probe, a refresh, or a fresh consent flow is required.
 //
 // Behavior:
 //   1. Read .env.auth.json. Missing → grant flow.
@@ -21,8 +19,7 @@
 //           node cmd-auth.mjs --token    after ensuring valid, print access_token to stdout
 //
 // Storage:  <project>/.env.auth.json (chmod 600, gitignored). Sorts
-// adjacent to .env in directory listings. Schema matches the historical
-// ~/.if/creds/<email>.json so existing files migrate by `cp`.
+// adjacent to .env in directory listings.
 //
 // Timeouts: HTTP calls = 25s. Browser consent = 60s on first-time, 25s
 // thereafter (a stuck flow fails fast; a re-run is cheap).
@@ -42,8 +39,8 @@ const CLIENT_SECRET = 'ZmssLNjJy2998hD4CTg2ejr2';
 const SCOPE = 'openid email https://www.googleapis.com/auth/cloud-platform';
 
 const HTTP_TIMEOUT_MS = 25_000;
-const BROWSER_TIMEOUT_FIRST_MS = 60_000;
-const BROWSER_TIMEOUT_REPEAT_MS = 25_000;
+const BROWSER_TIMEOUT_FIRST_MS = 120_000;
+const BROWSER_TIMEOUT_REPEAT_MS = 120_000;
 
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const CRED_PATH = path.join(PROJECT_ROOT, '.env.auth.json');
