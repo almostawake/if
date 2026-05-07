@@ -39,8 +39,8 @@ const CLIENT_SECRET = 'ZmssLNjJy2998hD4CTg2ejr2';
 const SCOPE = 'openid email https://www.googleapis.com/auth/cloud-platform';
 
 const HTTP_TIMEOUT_MS = 25_000;
-const BROWSER_TIMEOUT_FIRST_MS = 120_000;
-const BROWSER_TIMEOUT_REPEAT_MS = 120_000;
+const BROWSER_TIMEOUT_FIRST_MS = 300_000;
+const BROWSER_TIMEOUT_REPEAT_MS = 300_000;
 
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const CRED_PATH = path.join(PROJECT_ROOT, '.env.auth.json');
