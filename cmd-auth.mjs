@@ -106,13 +106,25 @@ async function refresh(cred) {
 }
 
 function openBrowser(url) {
-  const claudeChrome = path.join(
+  // Use macOS `open -a APP URL` to direct the URL to a specific app
+  // bundle. Direct spawn of the launcher's executable script worked
+  // sometimes, but Chrome's process-singleton can route the URL to
+  // whichever Chrome instance grabbed the LaunchServices URL handler
+  // first (often regular Chrome, not our Claude profile). `open -a`
+  // is the macOS-blessed path that reliably hands the URL to the
+  // named app.
+  const launcherApp = path.join(
     process.env.HOME || '',
-    'Applications/Chrome with Claude Code.app/Contents/MacOS/Chrome with Claude Code'
+    'Applications/Chrome with Claude Code.app'
   );
-  const cmd = fs.existsSync(claudeChrome) ? claudeChrome : 'open';
-  const args = fs.existsSync(claudeChrome) ? [url] : [url];
-  spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
+  if (fs.existsSync(launcherApp)) {
+    console.error(`   (opening in Chrome with Claude Code)`);
+    spawn('open', ['-a', launcherApp, url], { detached: true, stdio: 'ignore' }).unref();
+    return;
+  }
+  console.error(`   (launcher not found at ${launcherApp} — using default browser)`);
+  const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
+  spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
 }
 
 const SUCCESS_HTML = (email) => `<!doctype html><meta charset=utf-8><title>Signed in</title>
