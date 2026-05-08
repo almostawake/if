@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "install:all": "npm i && cd client && npm i",
+    "install:all": "npm i && cd client && npm i && cd ../functions && npm i",
     "build:all": "cd client && npm run build",
     "start:emulators": "mkdir -p emulator-data && firebase --project demo-not-required emulators:start --only auth,functions,firestore,storage --export-on-exit=emulator-data --import=emulator-data 2>&1 | tee /tmp/firebase-emulator.log",
     "start:client": "cd client && npm run dev",

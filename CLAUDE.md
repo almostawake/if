@@ -7,6 +7,7 @@ Fast-track small automation solutions for non-developers.
 Read the relevant topic file before working in its area:
 - **docs/CLAUDE-STACK.md** — target tech stack and architecture, stick to these technologies, they are all pre-provisioned
 - **docs/CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
+- **docs/CLAUDE-API.md** — inbound HTTP API conventions. Read before adding any HTTP endpoint (webhook, server-to-server, etc.).
 
 ## Non-technical Audience
 

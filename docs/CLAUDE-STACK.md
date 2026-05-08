@@ -18,7 +18,7 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | Components | **shadcn-svelte** + **bits-ui** | Components are *copied into the repo*, not a dependency. LLMs can grep and read the exact API instead of hallucinating props. |
 | Icons | **lucide-svelte** | De-facto standard, huge set, tree-shakes. |
 | State | **Class-based rune stores** | One class per domain, `$state` + methods + `$derived` co-located. See "State pattern" below. |
-| Backend | **Firebase** — Auth, Firestore, Functions, Storage | Same as reference app. |
+| Backend | **Firebase** — Auth, Firestore, Functions, Storage | Same as reference app. All resources in `australia-southeast1` (Sydney) — see "Region" below. |
 | Auth (default) | **Admin-password callable function** reading `ADMIN_PASSWORD` from `functions/.env` | Avoids OAuth consent screen pain on first run. Matches the template audience: personal automation with a single admin. See "Escalation paths" below if real end users are needed. |
 | Validation | **Zod** | Used at every I/O boundary: form → Firestore, LLM response → typed object, scraped fields → typed object. |
 | LLM | **Gemini API** (via a Cloud Function that holds the key) | Single LLM SDK across the stack. Key lives server-side. Costs are real — no free tier to hide behind. |
@@ -28,6 +28,17 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | Notifications (push to phone) | **Ntfy** (`ntfy.sh`) | Zero-account, free, one `fetch` call. Topic lives in `functions/.env`. |
 | Local dev | **Firebase emulator suite** | Free local emulation is a hard requirement — see ../CLAUDE.md. |
 | Lint/format | **ESLint + Prettier + svelte-check** | `npm run check` = `svelte-check && eslint .` |
+
+---
+
+## Region
+
+All Firebase resources default to **`australia-southeast1`** (Sydney):
+
+- **Firestore** and **default Storage bucket** — provisioned to Sydney by the new-project script (`../aa/n`).
+- **Cloud Functions** (and the Cloud Run services + Artifact Registry repos they spawn) — pinned via `setGlobalOptions({region: "australia-southeast1"})` at the top of `functions/src/index.ts`. Every function in this codebase inherits.
+
+Don't override per-function unless there's a real reason — keeping everything in one region avoids cross-region latency and egress costs. If you ever need a function elsewhere, set `region` on that specific `onRequest` / `onCall` / etc., not by editing `setGlobalOptions`.
 
 ---
 
