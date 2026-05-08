@@ -86,8 +86,13 @@ fs.writeFileSync(
   { mode: 0o600 }
 );
 
+// --force: auto-creates the gcf-artifacts cleanup policy (1d default)
+// so the post-deploy "no cleanup policy detected" error doesn't fail
+// the run, and skips confirmation prompts (orphan-function deletion,
+// minInstances cost-bump confirms, unsafe trigger migrations) that
+// aren't useful for this template's solo-dev flow.
 const passthrough = process.argv.slice(2);
-const args = ['firebase', 'deploy', '--project', project, ...passthrough];
+const args = ['firebase', 'deploy', '--project', project, '--force', ...passthrough];
 console.log(`deploy: project=${project} auth=${authFile} → npx ${args.join(' ')}`);
 
 let exitCode = 0;
