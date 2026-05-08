@@ -107,13 +107,14 @@ const data = await res.json();
 
 **Test fixtures:** project-level test data lives in `client/test/fixtures/` (checked-in) once a project starts accumulating any. Copy to `client/static/` to use, clean up after.
 
-## Deploying
+## Deploying / Auth
 
-- **Use `node cmd-deploy.mjs` for ALL deploys.** Do NOT run `firebase deploy`, `firebase-tools`, or any other deploy path — they fail under our auth model (gcloud's shared OAuth client can't grant the Firebase scope, and Cloud Identity Free orgs disable service-account keys). `cmd-deploy.mjs` calls the underlying REST APIs directly with the access token we already have. Header comment in the script has the full reasoning.
-- The script reads **`PROJECT_ID`** from a root **`.env`** (gitignored). Deliberate 1:1 mapping between checkout and target project — no dev/test/prod split for this template's audience.
-- If `.env` is missing or you need to retarget, write it manually: `PROJECT_ID=<gcp-project-id>`.
-- For (re)authentication run `node cmd-auth.mjs` — handles probe / refresh / fresh consent transparently. Cred lives at `.env.auth.json` (gitignored).
-- The script **builds first** (`npm run build:all`), then pushes — no separate build step needed.
+- **Deploy:** `npm run deploy:<target>` — names are self-explanatory (`deploy`, `deploy:hosting`, `deploy:functions`, `deploy:rules`, `deploy:indexes`).
+- **Auth:** `npm run auth` (refresh / consent) · `npm run auth:status` (probe-only).
+- **Don't run** `firebase login`, `firebase-tools login`, or `gcloud auth login` — blocked by a hook. They'd shadow this template's auth model anyway. `firebase deploy` and `firebase emulators:*` flow through; the deploy wrapper invokes them with the right ADC creds.
+- **`.env`** carries `THIS_PROJECT_ID_ON_GOOGLE_HOSTING` (gitignored, 1:1 with checkout — no dev/test/prod split for this template's audience). If missing, write it manually.
+- **Multi-account:** to deploy or auth as a non-default account, override `ACCOUNT_EMAIL` (e.g. `ACCOUNT_EMAIL=alice@x.com npm run deploy:functions`) — picks up `.env.auth.alice@x.com.json`. `npm run auth -- alice@x.com` adds a new one.
+- **Build:** wired into `firebase.json`'s hosting `predeploy`; runs automatically when hosting is in scope.
 
 ## Data model conventions
 - Every Firestore-backed type must have a `@collection` JSDoc tag with its full path (e.g. `@collection users/{uid}/transactions`). Update when renaming/moving collections.

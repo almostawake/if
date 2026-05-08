@@ -14,12 +14,19 @@ ui-debug.log
 .env
 .env.local
 .env.*.local
-# Per-project Google OAuth cred (written by cmd-auth.mjs). Holds a
-# refresh_token — never commit.
+# Per-project Google OAuth creds (written by cmd-auth.mjs). Hold
+# refresh_tokens — never commit. Default file plus optional per-account
+# files for cross-project juggling.
 .env.auth.json
+.env.auth.*.json
+# Synthesized ADC creds for firebase-tools, written/cleaned by
+# cmd-deploy.mjs on each deploy. Same refresh token as .env.auth*.json.
+.adc.json
 # Per-project Firebase Web config (VITE_FIREBASE_*). Public-bundled
 # config, but project-specific so not template-generic.
 client/.env
+# Per-project functions env (e.g. INCOMING_API_KEY equivalents).
+functions/.env
 
 # Firebase emulator persistence (--export-on-exit / --import target).
 emulator-data/

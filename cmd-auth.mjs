@@ -1,25 +1,40 @@
 #!/usr/bin/env node
 //
-// cmd-auth.mjs — ensure a valid Google OAuth access_token in .env.auth.json.
+// cmd-auth.mjs — ensure a valid Google OAuth access_token.
 //
 // Single entry point for token validity. Callers don't have to know
 // whether a probe, a refresh, or a fresh consent flow is required.
 //
-// Behavior:
-//   1. Read .env.auth.json. Missing → grant flow.
+// Multi-account: pass an email as the first positional arg to ensure
+// auth for that specific account. Each account has its own file with
+// its own refresh token, kept independent. Without an arg, uses the
+// default (single-account) file — preserves prior behavior.
+//
+// Behavior (per account):
+//   1. Read .env.auth[.<email>].json. Missing → grant flow.
 //   2. Probe stored access_token against userinfo. 200 → done.
 //   3. On 401/403 → POST refresh_token. 200 → atomic write-back, done.
 //   4. On 400 invalid_grant → grant flow.
 //   5. Other refresh failures → throw (network, 5xx, etc.).
 //
 // Library:  import { ensureValidToken } from './cmd-auth.mjs'
-// CLI:      node cmd-auth.mjs            ensure valid (probe → refresh → grant)
-//           node cmd-auth.mjs --status   probe-only, never opens browser
-//           node cmd-auth.mjs --force    skip checks, force fresh grant
-//           node cmd-auth.mjs --token    after ensuring valid, print access_token to stdout
+//             ensureValidToken()                       — default file
+//             ensureValidToken({ account: '<email>' }) — per-account
+// CLI:      node cmd-auth.mjs                         default
+//           node cmd-auth.mjs <email>                 per-account
+//           node cmd-auth.mjs [<email>] --status      probe-only
+//           node cmd-auth.mjs [<email>] --force       force fresh grant
+//           node cmd-auth.mjs [<email>] --token       print access_token
 //
-// Storage:  <project>/.env.auth.json (chmod 600, gitignored). Sorts
-// adjacent to .env in directory listings.
+// Storage:  .env.auth.json                  default
+//           .env.auth.<email>.json          per-account (literal email)
+//           chmod 600, gitignored. Sort adjacent to .env in listings.
+//
+// Account binding: when an account is requested, the OAuth URL carries
+// login_hint=<email> (Google pre-selects that account; chooser still
+// shows when needed). Post-grant we verify userinfo.email matches the
+// requested account (case-insensitive). Mismatch = hard error, no file
+// written.
 //
 // Timeouts: HTTP calls = 25s. Browser consent = 60s on first-time, 25s
 // thereafter (a stuck flow fails fast; a re-run is cheap).
@@ -43,21 +58,32 @@ const BROWSER_TIMEOUT_FIRST_MS = 300_000;
 const BROWSER_TIMEOUT_REPEAT_MS = 300_000;
 
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
-const CRED_PATH = path.join(PROJECT_ROOT, '.env.auth.json');
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/auth';
 
-function readCred() {
-  if (!fs.existsSync(CRED_PATH)) return null;
-  return JSON.parse(fs.readFileSync(CRED_PATH, 'utf8'));
+// Per-account file when account is given, default file otherwise. The
+// email is preserved literally in the filename (filesystems handle @/.
+// fine, and an unsanitised email keeps the file unambiguously tied to
+// the account it auths).
+function credPath(account) {
+  return account
+    ? path.join(PROJECT_ROOT, `.env.auth.${account}.json`)
+    : path.join(PROJECT_ROOT, '.env.auth.json');
 }
 
-function writeCred(cred) {
-  const tmp = `${CRED_PATH}.tmp`;
+function readCred(account) {
+  const p = credPath(account);
+  if (!fs.existsSync(p)) return null;
+  return JSON.parse(fs.readFileSync(p, 'utf8'));
+}
+
+function writeCred(cred, account) {
+  const p = credPath(account);
+  const tmp = `${p}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(cred, null, 2));
   fs.chmodSync(tmp, 0o600);
-  fs.renameSync(tmp, CRED_PATH);
+  fs.renameSync(tmp, p);
 }
 
 async function fetchWithTimeout(url, opts = {}, timeoutMs = HTTP_TIMEOUT_MS) {
@@ -135,7 +161,7 @@ const ERROR_HTML = (msg) => `<!doctype html><meta charset=utf-8><title>Error</ti
 <h1>✗ ${msg}</h1>
 <p>Return to your terminal.</p>`;
 
-async function grant({ timeoutMs }) {
+async function grant({ timeoutMs, account }) {
   return new Promise((resolve, reject) => {
     let timer;
     const server = http.createServer(async (req, res) => {
@@ -179,6 +205,17 @@ async function grant({ timeoutMs }) {
         const userinfo = await userinfoRes.json();
         const email = userinfo.email || 'unknown';
 
+        // login_hint is a hint, not a constraint — user can still pick a
+        // different account in the chooser. Reject mismatches loudly so
+        // we don't write the wrong account's tokens to the wrong file.
+        if (account && email.toLowerCase() !== account.toLowerCase()) {
+          res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
+          res.end(ERROR_HTML(`Signed in as ${email}, not ${account}`));
+          cleanup();
+          reject(new Error(`account mismatch: requested ${account}, got ${email}`));
+          return;
+        }
+
         res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
         res.end(SUCCESS_HTML(email));
         cleanup();
@@ -210,9 +247,11 @@ async function grant({ timeoutMs }) {
         access_type: 'offline',
         prompt: 'consent'
       });
+      if (account) params.set('login_hint', account);
       const url = `${AUTH_URL}?${params}`;
       const secs = Math.floor(timeoutMs / 1000);
-      console.error(`⋯  opening browser for sign-in (${secs}s timeout)`);
+      const who = account ? ` as ${account}` : '';
+      console.error(`⋯  opening browser for sign-in${who} (${secs}s timeout)`);
       console.error(`   if it doesn't open, click: ${url}`);
       openBrowser(url);
       timer = setTimeout(() => {
@@ -223,13 +262,15 @@ async function grant({ timeoutMs }) {
   });
 }
 
-// Returns a fresh, valid access_token. Side effect: may write .env.auth.json.
+// Returns a fresh, valid access_token. Side effect: may write the cred
+// file (.env.auth.json or .env.auth.<email>.json depending on account).
 // Throws when no valid path forward exists (network down, user dismissed, etc.).
-export async function ensureValidToken({ force = false } = {}) {
-  const isFirstTime = !fs.existsSync(CRED_PATH);
+export async function ensureValidToken({ force = false, account } = {}) {
+  const credFile = credPath(account);
+  const isFirstTime = !fs.existsSync(credFile);
 
   if (!force && !isFirstTime) {
-    const cred = readCred();
+    const cred = readCred(account);
     const stored = cred?.tokens?.access_token;
     if (stored) {
       const probeRes = await probe(stored);
@@ -244,7 +285,7 @@ export async function ensureValidToken({ force = false } = {}) {
     if (cred?.tokens?.refresh_token) {
       try {
         const newTokens = await refresh(cred);
-        writeCred({ ...cred, tokens: newTokens });
+        writeCred({ ...cred, tokens: newTokens }, account);
         return newTokens.access_token;
       } catch (e) {
         if (e.code !== 'INVALID_GRANT') throw e;
@@ -254,8 +295,8 @@ export async function ensureValidToken({ force = false } = {}) {
   }
 
   const timeoutMs = isFirstTime ? BROWSER_TIMEOUT_FIRST_MS : BROWSER_TIMEOUT_REPEAT_MS;
-  const { email, tokens } = await grant({ timeoutMs });
-  writeCred({ email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens });
+  const { email, tokens } = await grant({ timeoutMs, account });
+  writeCred({ email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens }, account);
   console.error(`✓  signed in as ${email}`);
   return tokens.access_token;
 }
@@ -267,11 +308,14 @@ if (isMain) {
   const force = args.includes('--force');
   const status = args.includes('--status');
   const wantsToken = args.includes('--token');
+  // First non-flag arg = account email (or undefined for default).
+  const account = args.find(a => !a.startsWith('--'));
+  const credLabel = account ? `.env.auth.${account}.json` : '.env.auth.json';
 
   if (status) {
-    const cred = readCred();
+    const cred = readCred(account);
     if (!cred) {
-      console.log('no cred file at .env.auth.json — sign-in required');
+      console.log(`no cred file at ${credLabel} — sign-in required`);
       process.exit(1);
     }
     const stored = cred.tokens?.access_token;
@@ -294,7 +338,7 @@ if (isMain) {
   }
 
   try {
-    const token = await ensureValidToken({ force });
+    const token = await ensureValidToken({ force, account });
     if (wantsToken) console.log(token);
     process.exit(0);
   } catch (e) {

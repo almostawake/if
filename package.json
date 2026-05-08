@@ -7,7 +7,14 @@
     "build:all": "cd client && npm run build",
     "start:emulators": "mkdir -p emulator-data && firebase --project demo-not-required emulators:start --only auth,functions,firestore,storage --export-on-exit=emulator-data --import=emulator-data 2>&1 | tee /tmp/firebase-emulator.log",
     "start:client": "cd client && npm run dev",
-    "check": "cd client && npm run check"
+    "check": "cd client && npm run check",
+    "auth": "node cmd-auth.mjs",
+    "auth:status": "node cmd-auth.mjs --status",
+    "deploy": "node cmd-deploy.mjs",
+    "deploy:hosting": "node cmd-deploy.mjs --only hosting",
+    "deploy:functions": "node cmd-deploy.mjs --only functions",
+    "deploy:rules": "node cmd-deploy.mjs --only firestore:rules,storage",
+    "deploy:indexes": "node cmd-deploy.mjs --only firestore:indexes"
   },
   "devDependencies": {
     "firebase-tools": "^15.9.1"

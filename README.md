@@ -7,12 +7,12 @@ you're in.
 ## start
 
 1. copy this folder to your projects dir (remove `.git` if you want a fresh history).
-2. seed `.env` (see `.env.example`) with `PROJECT_ID=<gcp-project-id>`.
+2. seed `.env` (see `.env.example`) with `THIS_PROJECT_ID_ON_GOOGLE_HOSTING=<gcp-project-id>`.
 3. seed `client/.env` with the Firebase Web config (`VITE_FIREBASE_*` keys) from your Firebase console.
-4. `node cmd-auth.mjs` once — Google OAuth consent in the browser. Writes `.env.auth.json`.
+4. `npm run auth` once — Google OAuth consent in the browser. Writes `.env.auth.json`.
 5. `npm run install:all` to install dependencies.
 6. `npm run start:emulators` + `npm run start:client` for local dev (ports 4000 + 5173).
-7. `node cmd-deploy.mjs` to ship.
+7. `npm run deploy` to ship.
 
 ## prerequisites
 
@@ -26,6 +26,6 @@ bootstrap tooling that sets all that up automatically lives in `../aa-migrate` (
 - `client/` — the sveltekit dashboard
 - `functions/` — cloud functions
 - `cmd-auth.mjs` — Google OAuth (probe / refresh / fresh consent)
-- `cmd-deploy.mjs` — Firebase Hosting + Firestore Rules deploy via REST
+- `cmd-deploy.mjs` — thin firebase-tools wrapper invoked by `npm run deploy*`
 - `CLAUDE.md`, `docs/CLAUDE-*.md` — agent instructions for Claude Code
 - `.claude/` — agent settings + hooks

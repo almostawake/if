@@ -1,42 +1,33 @@
 #!/usr/bin/env node
 //
-// Firebase Hosting + Firestore Rules deploy via REST.
+// cmd-deploy.mjs — thin wrapper around `firebase deploy`.
 //
-// THE deploy script for this template — see CLAUDE.md § Deploying.
+// Invoked by the npm `deploy*` scripts (see package.json). Args after
+// the script name flow through to firebase-tools, so:
+//   npm run deploy:functions   →  firebase deploy --only functions
+//   npm run deploy -- --debug  →  firebase deploy --debug
 //
-// Why REST instead of `firebase deploy`:
-//   firebase-tools requires its own scope set on the OAuth token. We
-//   authenticate via gcloud's shared OAuth client, which won't grant the
-//   firebase scope (Google restricts it). Service-account keys would also
-//   work, but Cloud Identity Free orgs ship with key creation disabled at
-//   the org level. Both wrappers fail. This script calls the underlying
-//   REST APIs directly using whatever access token we already have —
-//   exactly what firebase-tools and SA-auth ultimately do anyway.
+// Auth model: firebase-tools runs in ADC mode. We synthesize a one-off
+// .adc.json from the project's stored OAuth refresh token (written by
+// cmd-auth.mjs at .env.auth.json or .env.auth.<email>.json), point
+// GOOGLE_APPLICATION_CREDENTIALS at it, and let firebase-tools refresh
+// as needed. Cleaned up in the finally block.
 //
-// Usage:
-//   node cmd-deploy.mjs           # everything from .env + defaults
+// Why ADC instead of `firebase login`: gcloud's shared OAuth client
+// (which we re-use to dodge the per-project Firebase scope grant) can't
+// satisfy firebase-tools' own scope check on `firebase login` tokens.
+// ADC sidesteps that — firebase-tools trusts ADC creds and lets the
+// underlying APIs decide. cloud-platform scope covers everything.
 //
-// Inputs (in priority order):
-//   PROJECT_ID            from .env (required)  — the GCP/Firebase project id
-//   GOOGLE_ACCESS_TOKEN   env var (optional)    — explicit token (used by setup-project's first-deploy)
-//   PROJECT_SITE          .env / env (optional) — Firebase Hosting site (default: PROJECT_ID)
-//   PUBLIC_DIR            .env / env (optional) — built static dir   (default: client/build)
-//   RULES_FILE            .env / env (optional) — firestore rules    (default: firestore.rules)
-//
-// Auth: delegates to cmd-auth.mjs (project-local cred at .env.auth.json).
-// auth.mjs handles probe / refresh / grant transparently — deploy just
-// awaits a valid token and proceeds. If GOOGLE_ACCESS_TOKEN is set,
-// auth.mjs is skipped entirely (used by setup-project's first deploy).
+// Inputs (.env or process.env):
+//   THIS_PROJECT_ID_ON_GOOGLE_HOSTING  required — the GCP/Firebase project id
+//   ACCOUNT_EMAIL                      optional — picks .env.auth.<email>.json
+//                                      (defaults to .env.auth.json)
 
 import fs from 'node:fs';
 import path from 'node:path';
-import zlib from 'node:zlib';
-import crypto from 'node:crypto';
-import { execSync } from 'node:child_process';
-import { ensureValidToken } from './cmd-auth.mjs';
+import { spawnSync } from 'node:child_process';
 
-// Minimal .env loader: KEY=VALUE per line, # comments, optional surrounding
-// quotes. Existing process.env entries win, so callers can override.
 function loadDotenv(file = '.env') {
   let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch (e) {
@@ -58,166 +49,59 @@ function loadDotenv(file = '.env') {
 }
 loadDotenv();
 
-const project = process.env.PROJECT_ID;
+const project = process.env.THIS_PROJECT_ID_ON_GOOGLE_HOSTING;
 if (!project) {
-  console.error('error: PROJECT_ID not set (expected in .env at project root)');
+  console.error('error: THIS_PROJECT_ID_ON_GOOGLE_HOSTING not set (expected in .env)');
   process.exit(2);
 }
-const site = process.env.PROJECT_SITE || project;
-const publicDir = process.env.PUBLIC_DIR || 'client/build';
-const rulesFile = process.env.RULES_FILE || 'firestore.rules';
 
-let accessToken = process.env.GOOGLE_ACCESS_TOKEN;
-let tokenSource = accessToken ? 'env:GOOGLE_ACCESS_TOKEN' : '';
-
-if (!accessToken) {
-  try {
-    accessToken = await ensureValidToken();
-    tokenSource = '.env.auth.json';
-  } catch (e) {
-    console.error(`error: ${e.message}`);
-    console.error('  fix: run `node cmd-auth.mjs` to authenticate.');
-    process.exit(2);
-  }
+// File resolution: prefer .env.auth.<ACCOUNT_EMAIL>.json when the
+// per-account file exists; otherwise fall back to the default
+// .env.auth.json. n's first-deploy writes ACCOUNT_EMAIL but only the
+// default cred file (no per-account rename), so the fallback is what
+// makes that flow work without special-casing.
+const account = process.env.ACCOUNT_EMAIL;
+const perAccount = account ? `.env.auth.${account}.json` : null;
+const defaultFile = '.env.auth.json';
+const authFile =
+  perAccount && fs.existsSync(perAccount) ? perAccount :
+  fs.existsSync(defaultFile) ? defaultFile :
+  null;
+if (!authFile) {
+  const hint = account ? ` -- ${account}` : '';
+  console.error(`error: no .env.auth*.json found — run \`npm run auth${hint}\` first`);
+  process.exit(2);
 }
 
-console.log(`deploy: project=${project} site=${site} publicDir=${publicDir} rules=${rulesFile} token=${tokenSource}`);
+const auth = JSON.parse(fs.readFileSync(authFile, 'utf8'));
+const adcPath = path.resolve('.adc.json');
+fs.writeFileSync(
+  adcPath,
+  JSON.stringify({
+    type: 'authorized_user',
+    client_id: auth.client_id,
+    client_secret: auth.client_secret,
+    refresh_token: auth.tokens.refresh_token,
+  }),
+  { mode: 0o600 }
+);
 
-// Build first — these projects are tiny and the cost is trivial. Always
-// pushing fresh output beats the "I deployed but my changes aren't live"
-// trap. Stream the build output through so users see it.
-console.log('\n[build] npm run build:all');
+const passthrough = process.argv.slice(2);
+const args = ['firebase', 'deploy', '--project', project, ...passthrough];
+console.log(`deploy: project=${project} auth=${authFile} → npx ${args.join(' ')}`);
+
+let exitCode = 0;
 try {
-  execSync('npm run build:all', { stdio: 'inherit' });
-} catch {
-  // npm itself prints the error; we just need to bail with a non-zero exit.
-  process.exit(1);
-}
-
-const auth = { Authorization: `Bearer ${accessToken}`, 'X-Goog-User-Project': project };
-
-async function api(method, url, { body, headers = {}, raw } = {}) {
-  const res = await fetch(url, {
-    method,
-    headers: { ...auth, ...headers, ...(body && !raw ? { 'Content-Type': 'application/json' } : {}) },
-    body: raw ? body : body ? JSON.stringify(body) : undefined
+  const result = spawnSync('npx', args, {
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      GOOGLE_APPLICATION_CREDENTIALS: adcPath,
+      GOOGLE_CLOUD_QUOTA_PROJECT: project,
+    },
   });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${method} ${url} → ${res.status}: ${text.slice(0, 600)}`);
-  return text ? (text.startsWith('{') || text.startsWith('[') ? JSON.parse(text) : text) : null;
+  exitCode = result.status ?? 1;
+} finally {
+  try { fs.unlinkSync(adcPath); } catch { /* already gone */ }
 }
-
-// Walk publicDir, gzip + sha256 each file. Returns Map<webPath, {hash, gz}>.
-function gatherFiles(dir, prefix = '') {
-  const out = new Map();
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    const web = `${prefix}/${entry.name}`;
-    if (entry.isDirectory()) {
-      for (const [k, v] of gatherFiles(full, web)) out.set(k, v);
-    } else {
-      const raw = fs.readFileSync(full);
-      // Hosting requires the *gzip-compressed* representation hashed and uploaded.
-      const gz = zlib.gzipSync(raw, { level: 9 });
-      const hash = crypto.createHash('sha256').update(gz).digest('hex');
-      out.set(web, { hash, gz });
-    }
-  }
-  return out;
-}
-
-async function deployHosting() {
-  console.log(`\n[hosting] gathering files from ${publicDir}…`);
-  const files = gatherFiles(publicDir);
-  console.log(`[hosting] ${files.size} files`);
-
-  console.log('[hosting] creating version…');
-  const version = await api(
-    'POST',
-    `https://firebasehosting.googleapis.com/v1beta1/sites/${site}/versions`,
-    {
-      body: {
-        config: {
-          // SPA fallback: any unknown path serves /index.html so SvelteKit's
-          // client-side router can take over.
-          rewrites: [{ glob: '**', path: '/index.html' }]
-        }
-      }
-    }
-  );
-  const versionName = version.name; // sites/{site}/versions/{id}
-  console.log(`[hosting] version: ${versionName}`);
-
-  console.log('[hosting] populateFiles (declares hashes)…');
-  const filesMap = {};
-  for (const [web, { hash }] of files) filesMap[web] = hash;
-  const pop = await api('POST', `https://firebasehosting.googleapis.com/v1beta1/${versionName}:populateFiles`, {
-    body: { files: filesMap }
-  });
-  const required = new Set(pop.uploadRequiredHashes ?? []);
-  const uploadUrl = pop.uploadUrl; // base URL; append /<hash> for each upload
-  console.log(`[hosting] ${required.size} files need upload`);
-
-  // Upload each required hash.
-  let i = 0;
-  for (const [web, { hash, gz }] of files) {
-    if (!required.has(hash)) continue;
-    i++;
-    const url = `${uploadUrl}/${hash}`;
-    process.stdout.write(`  [${i}/${required.size}] ${web} (${gz.length}b)\r`);
-    await api('POST', url, {
-      raw: true,
-      body: gz,
-      headers: { 'Content-Type': 'application/octet-stream' }
-    });
-  }
-  process.stdout.write('\n');
-
-  console.log('[hosting] finalizing version…');
-  await api('PATCH', `https://firebasehosting.googleapis.com/v1beta1/${versionName}?update_mask=status`, {
-    body: { status: 'FINALIZED' }
-  });
-
-  console.log('[hosting] creating release…');
-  await api(
-    'POST',
-    `https://firebasehosting.googleapis.com/v1beta1/sites/${site}/releases?versionName=${versionName}`
-  );
-
-  console.log(`[hosting] ✓ deployed: https://${site}.web.app`);
-}
-
-async function deployRules() {
-  if (!rulesFile) {
-    console.log('\n[rules] (skipped — no rulesFile arg)');
-    return;
-  }
-  console.log(`\n[rules] uploading ${rulesFile}…`);
-  const src = fs.readFileSync(rulesFile, 'utf8');
-  const ruleset = await api('POST', `https://firebaserules.googleapis.com/v1/projects/${project}/rulesets`, {
-    body: { source: { files: [{ name: 'firestore.rules', content: src }] } }
-  });
-  console.log(`[rules] ruleset: ${ruleset.name}`);
-
-  // Update or create the cloud.firestore release pointing at this ruleset.
-  const releaseName = `projects/${project}/releases/cloud.firestore`;
-  try {
-    await api('PATCH', `https://firebaserules.googleapis.com/v1/${releaseName}`, {
-      body: { release: { name: releaseName, rulesetName: ruleset.name } }
-    });
-    console.log('[rules] ✓ release updated');
-  } catch (e) {
-    if (String(e).includes('404')) {
-      await api('POST', `https://firebaserules.googleapis.com/v1/projects/${project}/releases`, {
-        body: { name: releaseName, rulesetName: ruleset.name }
-      });
-      console.log('[rules] ✓ release created');
-    } else {
-      throw e;
-    }
-  }
-}
-
-await deployHosting();
-await deployRules();
-console.log('\nAll done.');
+process.exit(exitCode);

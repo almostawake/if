@@ -5,6 +5,7 @@
   },
   "hosting": {
     "public": "client/build",
+    "predeploy": ["npm run build:all"],
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }]
   },
