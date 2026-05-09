@@ -19,7 +19,7 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | Icons | **lucide-svelte** | De-facto standard, huge set, tree-shakes. |
 | State | **Class-based rune stores** | One class per domain, `$state` + methods + `$derived` co-located. See "State pattern" below. |
 | Backend | **Firebase** — Auth, Firestore, Functions, Storage | Same as reference app. All resources in `australia-southeast1` (Sydney) — see "Region" below. |
-| Auth (default) | **Admin-password callable function** reading `ADMIN_PASSWORD` from `functions/.env` | Avoids OAuth consent screen pain on first run. Matches the template audience: personal automation with a single admin. See "Escalation paths" below if real end users are needed. |
+| Auth (default) | **Firebase Auth — Email Link sign-in** + `allowedEmails` whitelist in Firestore | Zero passwords, no OAuth consent screen, easy to administrate from the in-app users page. Same flow for owner and end users — no admin/non-admin split. See ../CLAUDE.md "Auth & deploy" for details. |
 | Validation | **Zod** | Used at every I/O boundary: form → Firestore, LLM response → typed object, scraped fields → typed object. |
 | LLM | **Gemini API** (via a Cloud Function that holds the key) | Single LLM SDK across the stack. Key lives server-side. Costs are real — no free tier to hide behind. |
 | Scraping (simple) | `fetch` from a Cloud Function | CORS-safe, no dependencies, use whenever a plain HTTP body is enough. |
@@ -206,7 +206,7 @@ Things the template deliberately does **not** ship, but documents as "if you nee
 
 | Need | Escalation | Notes |
 |---|---|---|
-| Real end users (not just an admin) | **Firebase Auth — Email Link sign-in** | Simpler than Google/MS OAuth for a non-technical audience: no consent screens, no client configuration. Point the user at Google OAuth only if they insist. |
+| Auth provider beyond Email Link (Google/MS OAuth, SAML, MFA…) | **Firebase Auth additional providers** | Email Link is the default and covers the template audience. Only swap if a user explicitly insists. Watch out for the `signInWithRedirect` Chrome 3rd-party cookie gotcha — see ../CLAUDE.md. |
 | Heavier scraping (Cloudflare-hard sites, long-running jobs, custom Chromium flags) | **Cloud Run + Playwright** | Cloud Functions can host Puppeteer+stealth fine for the common case; Cloud Run is the next rung when you hit memory, cold-start, or bundle-size walls. |
 | Relational queries | **Firestore with denormalised reads**, or last-resort **Cloud SQL** | NoSQL modelling covers almost every small-app need. Do not add Drizzle or an ORM — the types layer with `@collection` tags is the convention. |
 | Voice / SMS in | **Twilio** | Documented but not wired. Compliance and number provisioning are a real commitment — warn the user before starting. |
