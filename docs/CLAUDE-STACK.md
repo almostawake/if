@@ -44,15 +44,9 @@ Don't override per-function unless there's a real reason — keeping everything 
 
 ## Template scope
 
-This repo is a **template**, not an app. The rules:
+This repo is a **template**, not an app. It ships with the bare minimum: auth, an empty home page, and the capability layer below. New features land in their own routes (`src/routes/<feature>/`) and their own `functions/src/<feature>/` folder.
 
-- **Permanent plumbing:** everything under `src/lib/services/`, `src/lib/state/`, `src/lib/types/`, `src/lib/utils/`, and `functions/src/` files that aren't inside `functions/src/watchdog/`. These are the real capability layer — keep them, extend them.
-- **Disposable demo:** everything under `src/routes/(demo)/` and `functions/src/watchdog/`. These exist **only** to prove the plumbing works end-to-end. Delete the demo when real work starts.
-- **Do not add features to `(demo)/`.** Add them to new routes and a new `functions/src/{feature}/` folder.
-- **First file in every demo file** carries this comment, redundantly with this doc, because LLMs obey comments they can see:
-  ```ts
-  // DEMO — delete (demo)/ route group + functions/src/watchdog/ when starting real work. Not a feature.
-  ```
+The capability layer — `src/lib/services/`, `src/lib/state/`, `src/lib/types/`, `src/lib/utils/`, and `functions/src/` — is what gets extended, not replaced. Keep new code consistent with the patterns already there.
 
 ---
 

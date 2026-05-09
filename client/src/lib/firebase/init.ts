@@ -2,10 +2,10 @@ import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore';
 
-// Demo config: the projectId `demo-not-required` triggers Firebase's
-// "demo project" mode in the emulators — minimal config needed, no real
-// Firebase project required. Production builds should override these via
-// VITE_FIREBASE_* env vars.
+// Local-only fallback config. `demo-not-required` is the Firebase emulator
+// convention for "demo project" mode — no real Firebase project needed for
+// `npm run start:emulators`. Production builds override these via the
+// VITE_FIREBASE_* env vars in client/.env.
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? 'demo-key',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? 'demo-not-required.firebaseapp.com',
