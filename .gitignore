@@ -33,9 +33,5 @@ functions/.env
 # Firebase emulator persistence (--export-on-exit / --import target).
 emulator-data/
 
-# Per-machine session-color log written by .claude/hook-session-namer.mjs
-# and read by .claude/util-my-color.mjs. Pure local state — never commit.
-.claude/session-colors.log
-
 # OS
 .DS_Store

@@ -10,17 +10,6 @@
           }
         ]
       }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hook-session-namer.mjs"
-          }
-        ]
-      }
     ]
   }
 }
