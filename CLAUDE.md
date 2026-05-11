@@ -8,6 +8,8 @@ Read the relevant topic file before working in its area:
 - **docs/CLAUDE-STACK.md** — target tech stack and architecture, stick to these technologies, they are all pre-provisioned
 - **docs/CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
 - **docs/CLAUDE-API.md** — inbound HTTP API conventions. Read before adding any HTTP endpoint (webhook, server-to-server, etc.).
+- **docs/CLAUDE-EMULATORS.md** — Firebase emulator & dev-server operations. Read before starting/stopping emulators, seeding data, or driving the app in a browser.
+- **docs/CLAUDE-CHROME.md** — chrome-devtools MCP, tab marking, browser vs WebFetch. Read before opening or driving any page in the browser.
 
 ## Non-technical Audience
 
@@ -17,11 +19,20 @@ The target user is a non-developer — a business analyst, project manager, or t
 
 Three independent auth flows live in this project. Don't conflate them — each fails differently when you do.
 
-### 1. End-user app sign-in — Email Link + `allowedEmails` whitelist
+### 1. Admin sign-in — the **only** gated surface — Email Link + `allowedAdmins`
 
-The template ships with **Firebase Auth Email Link sign-in** + an `allowedEmails` whitelist in Firestore. Flow: user enters email → gets a magic link by email → clicks it → signed in. They're only let through if their lowercased email exists in `/allowedEmails/{email}`. The project owner's email must be seeded there before first login; from then on they add/remove others from the in-app users page.
+The template has **two user groups**, and only one of them signs in:
 
-Don't add Google OAuth, password auth, or other providers without asking. Email Link + whitelist is the chosen pattern: zero passwords, no consent-screen setup, easy to administrate. Point users here if they ask for "logins".
+- **End users at `/`** (and any other non-`/admin/*` route): **anonymous**. No sign-in, no Firestore writes from them. Whatever feature the template-user builds lives here. Don't gate `/` and don't add a login flow there unless explicitly asked — public-by-default is the template's chosen shape.
+- **Admins at `/admin/*`**: sign in via **Firebase Auth Email Link**, gated by an `allowedAdmins` whitelist in Firestore. Flow: enter email → magic link by email → click → signed in iff `request.auth.token.email.lower()` exists in `/allowedAdmins/{email}`. Magic-link only — no passwords, no OAuth.
+
+The `/admin` surface is for managing the app itself (today: the admin whitelist; later: scopes, integrations, etc.). End users never visit it.
+
+**Bootstrap:** the project owner's email must exist in `/allowedAdmins/{lowercased-email}` before first sign-in. Seed once at first deploy (or in the emulator — see "Admin whitelist seed" below). Once one admin is in, they add others from `/admin` itself; the Firestore rule lets any admin read/write the list (admins manage admins). If the list is ever emptied, recovery requires out-of-band access (Firebase Console / Admin SDK).
+
+**Don't conflate `allowedAdmins` with end-user state.** `allowedAdmins` gates a UI surface; it isn't a user record. If a feature later needs per-end-user state, that's a separate `/users/{uid}` collection keyed by Firebase Auth uid — distinct from `allowedAdmins`.
+
+**Don't add Google OAuth, password auth, or other sign-in providers for admins without asking.** Email Link is the chosen pattern: zero passwords, no consent-screen setup, easy to administrate. Point users here if they ask for "logins".
 
 **On the Firebase Web "API key" (`AIzaSy…`) in `client/.env`:** it's a misnamed *public project identifier*, not a credential — see [Firebase docs](https://firebase.google.com/docs/projects/api-keys). Safe to ship in the bundle. Real auth is Firebase Auth ID tokens + Firestore security rules. The file holds project-specific Firebase Web config (`VITE_FIREBASE_*`); seed it from your project's Firebase console (or the bootstrap of your choice) before deploying. Gitignored — never commit.
 
@@ -42,7 +53,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 **Hard rules — these are the failure modes that bite LLMs in fresh sessions:**
 - **Never** read `.env.auth.json` directly to pluck out an access_token. The stored token is usually expired; the file is meant to be consumed via `cmd-auth.mjs`.
 - **Never** roll your own refresh — no manual `POST` to `oauth2.googleapis.com/token`, no hand-written exchange of refresh_token for access_token. `cmd-auth.mjs` is the one place that does that, and it writes the refreshed tokens back atomically.
-- **Never** suggest `gcloud auth login`, `firebase login`, or `firebase-tools login` — they manage a separate auth state that this template ignores, they're blocked by `.claude/hooks/block-direct-auth.mjs`, and the user would be re-authenticating something this project doesn't read.
+- **Never** suggest `gcloud auth login`, `firebase login`, or `firebase-tools login` — they manage a separate auth state that this template ignores, they're blocked by `.claude/hook-block-direct-auth.mjs`, and the user would be re-authenticating something this project doesn't read.
 - If `cmd-auth.mjs --token` itself fails (network error, browser timeout on a fresh consent), surface the error — don't try to bypass it.
 
 **Multi-account:** pass the email as a positional arg — `node cmd-auth.mjs alice@x.com --token` — picks up `.env.auth.alice@x.com.json`. Add a new account with `npm run auth -- alice@x.com`. Probe-only check: `npm run auth:status` (or `node cmd-auth.mjs alice@x.com --status`).
@@ -83,64 +94,14 @@ See **docs/CLAUDE-API.md** for the full convention before adding any inbound end
 
 ## Test UI changes
 - Test significant UI changes before completing your turn. Use screenshots to verify layout/alignment.
-- Use the Claude browser extension (NOT Puppeteer or Selenium). If it's not working, retry once, then stop and ask the user to resolve.
+- Drive the browser via **chrome-devtools MCP only**. See **docs/CLAUDE-CHROME.md** for the full convention (tab marking, allowed/avoided APIs, browser vs WebFetch).
 - Make → verify → fix → verify — this tight loop catches bugs that code review alone misses.
 
 ## Firebase emulators & dev server
-- Always use npm scripts, never direct `firebase` commands:
-  - Start emulators: `npm run start:emulators` — logs go to `/tmp/firebase-emulator.log`
-  - Start client: `npm run start:client` (SvelteKit dev server, port 5173)
-- On first browser interaction in a conversation, check if emulators (port 4000) and dev server (port 5173) are running. Start any that are down — in parallel, in the background.
-- Check: `lsof -i :4000 >/dev/null 2>&1 && echo "running"` / `lsof -i :5173 >/dev/null 2>&1 && echo "running"`
-- **Stop emulators:** `lsof -ti :4400 | xargs kill` (kills the hub, which gracefully shuts down all child emulators)
-- **Stop dev server:** `lsof -ti :5173 | xargs kill`
-- **Verify shutdown:** confirm all emulator ports are free before reporting success:
-  `lsof -i :4000 -i :4400 -i :9099 -i :5001 -i :8080 -i :9199 >/dev/null 2>&1 || echo "all stopped"`
-- The local project ID is `demo-not-required` — this is a Firebase emulator convention, not a real project. Do NOT try to `firebase use` it.
-- Free local emulation is a deliberate constraint of this project. Do NOT suggest anything that requires a live Firebase project to develop against.
-- Do NOT deploy unless the user explicitly asks.
-
-### Emulator autonomy
-You have full autonomy over emulator state. Don't hesitate to create users, log in/out, clear data, or load data — whatever is fastest to verify your work.
-
-**Golden rule:** always use the app's own functions for every step — login, import, delete, etc. Never write directly to Firestore unless deliberately testing an edge case (e.g. simulating a stale schema). The app's flows create necessary parent docs, stamp schema versions, and maintain data integrity. Bypassing them causes subtle bugs (phantom docs, missing parent collections, stale caches).
-
-**Auth helpers** (use via `javascript_tool`):
-```js
-const { getFirebase } = await import('/src/lib/firebase/init.ts');
-const { auth } = getFirebase();
-auth.currentUser   // → User | null
-await auth.signOut();
-```
-Sign in goes through the app's email-link flow against the auth emulator's fake-link handler. Don't bypass it.
-
-**Two ways to reset data:**
-
-1. **Reset a user's data** — call the app's own delete/clear functions (e.g. via `javascript_tool` against an exported store action). The `users/{uid}` parent doc stays intact. Reload, then load new data.
-
-2. **Full clean slate** — stop emulators, delete persisted state, restart. Avoids stale browser auth tokens that cause silent write failures.
-   - Stop emulators: `lsof -ti :4400 | xargs kill`
-   - Delete persisted state: `rm -rf emulator-data/`
-   - Start emulators: `npm run start:emulators`
-   - Reload the page and **log in first** (creates the `users/{uid}` parent doc)
-   - Then load data
-
-   Do NOT use the emulator's DELETE REST endpoints to wipe auth/Firestore — they clear server state but leave stale auth tokens in the browser, causing the next `setDoc` to silently fail.
-
-**Native dialogs** (`alert`, `confirm`, `prompt`) block the browser extension — inject test data programmatically via `javascript_tool` instead.
-
-**Loading data programmatically:** copy the file to `client/static/` (SvelteKit serves it at root), `fetch('/file.json')` via `javascript_tool`, then clean up the copy. Always reload the page after importing so the app's startup hooks create parent docs and pick up new state. `client/static/*.json` should be gitignored to prevent accidentally committing test data.
-
-```js
-const { getFirebase } = await import('/src/lib/firebase/init.ts');
-const { auth } = getFirebase();
-const uid = auth.currentUser.uid;
-const res = await fetch('/myfile.json');           // any file under client/static/
-const data = await res.json();
-// then call the app's own import function — never write directly to Firestore.
-```
-
-**Test fixtures:** project-level test data lives in `client/test/fixtures/` (checked-in) once a project starts accumulating any. Copy to `client/static/` to use, clean up after.
+See **docs/CLAUDE-EMULATORS.md**. Highlights:
+- Always use `npm run start:emulators` / `npm run start:client` — never `firebase` commands directly.
+- On first emulator interaction in a session, **verify the project owner from `.env.auth.json` is in `allowedAdmins`**; seed if missing (ask first).
+- Don't deploy unless the user explicitly asks.
 
 ## Data model conventions
 - Every Firestore-backed type must have a `@collection` JSDoc tag with its full path (e.g. `@collection users/{uid}/transactions`). Update when renaming/moving collections.

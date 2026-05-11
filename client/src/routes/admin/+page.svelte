@@ -1,6 +1,11 @@
+<!--
+  /admin landing — manage admins. Add/remove emails on the
+  `allowedAdmins` whitelist. Anyone listed here can sign in to /admin
+  and edit this list (admins manage admins).
+-->
 <script lang="ts">
   import { authStore } from '$lib/state/AuthStore.svelte';
-  import { allowedEmailsStore } from '$lib/state/AllowedEmailsStore.svelte';
+  import { allowedAdminsStore } from '$lib/state/AllowedAdminsStore.svelte';
   import Page from '$lib/components/Page.svelte';
 
   let adding = $state(false);
@@ -32,7 +37,7 @@
     error = null;
     try {
       const me = authStore.user?.email ?? 'unknown';
-      await allowedEmailsStore.add(newEmail, me);
+      await allowedAdminsStore.add(newEmail, me);
       cancelAdd();
     } catch (err) {
       error = (err as Error).message;
@@ -44,7 +49,7 @@
   async function remove(email: string) {
     error = null;
     try {
-      await allowedEmailsStore.remove(email);
+      await allowedAdminsStore.remove(email);
     } catch (err) {
       error = (err as Error).message;
     }
@@ -52,18 +57,18 @@
 </script>
 
 <Page
-  title="whitelisted users"
-  description="these users will be allowed to log in and see everything."
+  title="admins"
+  description="these users can sign in to /admin and manage this list."
 >
   <ul class="space-y-1">
-    {#each allowedEmailsStore.emails as item (item.email)}
+    {#each allowedAdminsStore.admins as item (item.email)}
       <li class="group flex items-center gap-2">
         <span>{item.email}</span>
-        {#if allowedEmailsStore.emails.length > 1}
+        {#if allowedAdminsStore.admins.length > 1}
           <!--
             Two layered hover states. Row-hover (`group`) reveals the ×
             button; button-hover (`group/del`) additionally reveals the
-            "delete <email>" label. Mirrors the `+ add a user` pattern
+            "delete <email>" label. Mirrors the `+ add an admin` pattern
             below, just in red.
           -->
           <button
@@ -86,10 +91,10 @@
         type="button"
         class="group inline-flex items-center gap-2 text-fg-faint hover:text-fg"
         onclick={startAdd}
-        aria-label="add a user"
+        aria-label="add an admin"
       >
         <span class="text-[24px] leading-none">+</span>
-        <span class="opacity-0 transition-opacity group-hover:opacity-100">add a user</span>
+        <span class="opacity-0 transition-opacity group-hover:opacity-100">add an admin</span>
       </button>
     {:else}
       <form onsubmit={submitAdd} class="flex items-center gap-2">

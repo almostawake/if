@@ -17,7 +17,7 @@
     try {
       await AuthService.completeEmailLink(href);
       status = 'done';
-      goto('/', { replaceState: true });
+      goto('/admin', { replaceState: true });
     } catch (e) {
       const msg = (e as Error).message;
       // Most likely cause: opened on a different device, so localStorage
@@ -36,7 +36,7 @@
     try {
       await AuthService.completeEmailLink(window.location.href, email.trim());
       status = 'done';
-      goto('/', { replaceState: true });
+      goto('/admin', { replaceState: true });
     } catch (err) {
       status = 'error';
       error = (err as Error).message;

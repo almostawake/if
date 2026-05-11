@@ -10,9 +10,12 @@
   let error = $state<string | null>(null);
   let denied = $derived(page.url.searchParams.get('denied') === '1');
 
+  // /login is for admins only. If an already-signed-in admin lands
+  // here, bounce them straight to /admin (the only thing they sign in
+  // for in this template).
   $effect(() => {
-    if (authStore.loaded && authStore.user && authStore.whitelisted === true) {
-      goto('/', { replaceState: true });
+    if (authStore.loaded && authStore.user && authStore.isAdmin === true) {
+      goto('/admin', { replaceState: true });
     }
   });
 
@@ -37,7 +40,7 @@
     <form onsubmit={submit} class="space-y-3">
       {#if denied}
         <div class="text-err">
-          that email isn't on the access list. ask someone who's already in to add you.
+          that email isn't on the admin list. ask an existing admin to add you.
         </div>
       {/if}
       <label for="email" class="section-label block">email</label>

@@ -8,10 +8,10 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { getFirebase } from '$lib/firebase/init';
-import type { AllowedEmail } from '$lib/types/AllowedEmail';
+import type { AllowedAdmin } from '$lib/types/AllowedAdmin';
 
-class AllowedEmailsStore {
-  emails = $state<AllowedEmail[]>([]);
+class AllowedAdminsStore {
+  admins = $state<AllowedAdmin[]>([]);
   loaded = $state(false);
   error = $state<string | null>(null);
   private unsub: (() => void) | null = null;
@@ -19,17 +19,11 @@ class AllowedEmailsStore {
   start = () => {
     if (this.unsub) return;
     const { db } = getFirebase();
-    const q = query(collection(db, 'allowedEmails'), orderBy('addedAt', 'asc'));
+    const q = query(collection(db, 'allowedAdmins'), orderBy('addedAt', 'asc'));
     this.unsub = onSnapshot(
       q,
       (snap) => {
-        // Skip cached snapshots — they can fire with partial data when
-        // a sibling code path (e.g. AuthStore.checkWhitelist) has warmed
-        // the cache with a single doc. Waiting for the server snapshot
-        // means the user sees the full list at once instead of a
-        // flash-of-one-row → flash-of-all-rows transition.
-        if (snap.metadata.fromCache) return;
-        this.emails = snap.docs.map((d) => d.data() as AllowedEmail);
+        this.admins = snap.docs.map((d) => d.data() as AllowedAdmin);
         this.loaded = true;
       },
       (err) => {
@@ -48,17 +42,17 @@ class AllowedEmailsStore {
     const e = email.trim().toLowerCase();
     if (!e) throw new Error('Email is required');
     const { db } = getFirebase();
-    await setDoc(doc(db, 'allowedEmails', e), {
+    await setDoc(doc(db, 'allowedAdmins', e), {
       email: e,
       addedAt: Date.now(),
       addedBy
-    } satisfies AllowedEmail);
+    } satisfies AllowedAdmin);
   };
 
   remove = async (email: string) => {
     const { db } = getFirebase();
-    await deleteDoc(doc(db, 'allowedEmails', email.trim().toLowerCase()));
+    await deleteDoc(doc(db, 'allowedAdmins', email.trim().toLowerCase()));
   };
 }
 
-export const allowedEmailsStore = new AllowedEmailsStore();
+export const allowedAdminsStore = new AllowedAdminsStore();

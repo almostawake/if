@@ -5,8 +5,8 @@ import { getFirebase } from '$lib/firebase/init';
 
 class AuthStore {
   user = $state<User | null>(null);
-  /** null = not yet known, true/false = result of the whitelist check. */
-  whitelisted = $state<boolean | null>(null);
+  /** null = not yet known, true/false = result of the admin-whitelist check. */
+  isAdmin = $state<boolean | null>(null);
   loaded = $state(false);
   private unsub: (() => void) | null = null;
 
@@ -15,9 +15,9 @@ class AuthStore {
     this.unsub = AuthService.observe(async (u) => {
       this.user = u;
       if (!u || !u.email) {
-        this.whitelisted = null;
+        this.isAdmin = null;
       } else {
-        this.whitelisted = await this.checkWhitelist(u.email);
+        this.isAdmin = await this.checkAdmin(u.email);
       }
       this.loaded = true;
     });
@@ -32,14 +32,14 @@ class AuthStore {
     await AuthService.signOut();
   };
 
-  // The Firestore rule denies the read entirely for non-whitelisted
-  // users (it can't selectively allow "read your own row but nothing
-  // else" without risking info leaks). So both `permission denied` and
-  // `doc doesn't exist` collapse to the same answer: not whitelisted.
-  private checkWhitelist = async (email: string): Promise<boolean> => {
+  // The Firestore rule denies the read entirely for non-admin users
+  // (it can't selectively allow "read your own row but nothing else"
+  // without risking info leaks). So both `permission denied` and
+  // `doc doesn't exist` collapse to the same answer: not an admin.
+  private checkAdmin = async (email: string): Promise<boolean> => {
     try {
       const { db } = getFirebase();
-      const ref = doc(db, 'allowedEmails', email.toLowerCase());
+      const ref = doc(db, 'allowedAdmins', email.toLowerCase());
       const snap = await getDoc(ref);
       return snap.exists();
     } catch {

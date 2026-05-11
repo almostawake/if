@@ -1,41 +1,41 @@
+<!--
+  Admin-only gate + chrome. Every page under /admin/* renders inside
+  this layout, so the auth check + admin-whitelist check fire once for
+  the whole subtree. End-user pages (everything outside /admin) sit
+  outside this layout and are anonymous-browsable.
+-->
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { page } from '$app/state';
   import type { Snippet } from 'svelte';
   import { authStore } from '$lib/state/AuthStore.svelte';
-  import { allowedEmailsStore } from '$lib/state/AllowedEmailsStore.svelte';
+  import { allowedAdminsStore } from '$lib/state/AllowedAdminsStore.svelte';
 
   let { children }: { children: Snippet } = $props();
   let menuOpen = $state(false);
 
-  // Auth gate. Three states:
+  // Gate for /admin/*. Three states:
   //   no user           → /login
-  //   user, not allowed → sign out, /login?denied=1
-  //   user, allowed     → render the page
-  // We wait for `loaded` (auth observer + whitelist check both done) to
+  //   user, not admin   → sign out, /login?denied=1
+  //   user, admin       → render the page
+  // We wait for `loaded` (auth observer + admin check both done) to
   // avoid a redirect flicker on refresh.
   $effect(() => {
     if (!authStore.loaded) return;
     if (!authStore.user) {
       goto('/login', { replaceState: true });
-    } else if (authStore.whitelisted === false) {
+    } else if (authStore.isAdmin === false) {
       authStore.signOut().then(() => goto('/login?denied=1', { replaceState: true }));
     }
   });
 
   // Long-lived Firestore subscription tied to this layout's lifecycle.
-  // Only start once the user is known to be whitelisted — otherwise the
+  // Only start once the user is known to be an admin — otherwise the
   // onSnapshot would hit a permission-denied error.
   $effect(() => {
-    if (authStore.whitelisted !== true) return;
-    allowedEmailsStore.start();
-    return () => allowedEmailsStore.stop();
+    if (authStore.isAdmin !== true) return;
+    allowedAdminsStore.start();
+    return () => allowedAdminsStore.stop();
   });
-
-  const navItems = [
-    { href: '/', label: 'home' },
-    { href: '/users', label: 'manage users' }
-  ];
 
   function toggleMenu() {
     menuOpen = !menuOpen;
@@ -69,23 +69,24 @@
         <span aria-hidden="true" class="text-3xl leading-none">≡</span>
       </button>
       {#if menuOpen}
+        <!--
+          Single menu item for now. New admin pages (e.g. /admin/scopes)
+          should add themselves here in the same shape — a li with an
+          anchor — so the menu stays the single source of nav truth.
+        -->
         <nav
           class="absolute left-0 top-full mt-1 min-w-[180px] border border-border bg-white shadow-sm"
         >
           <ul>
-            {#each navItems as item (item.href)}
-              {@const active = page.url.pathname === item.href}
-              <li>
-                <a
-                  href={item.href}
-                  onclick={closeMenu}
-                  class="block px-3 py-2 hover:bg-bg-hover"
-                  class:active
-                >
-                  {item.label}
-                </a>
-              </li>
-            {/each}
+            <li>
+              <a
+                href="/admin"
+                onclick={closeMenu}
+                class="block px-3 py-2 hover:bg-bg-hover"
+              >
+                manage admins
+              </a>
+            </li>
             <li class="border-t border-border">
               <button
                 type="button"
@@ -106,22 +107,15 @@
 
   <!--
     Page-content gutter: pl uses --page-gutter (= the menu icon's visible
-    left edge, defined in app.css) so every page in this group aligns
-    with the menu icon. New pages should not add their own horizontal
-    padding — they inherit this.
+    left edge, defined in app.css) so every admin page aligns with the
+    menu icon. New pages should not add their own horizontal padding —
+    they inherit this.
 
     `flex flex-col` makes <main> a flex column so a page can opt into
-    filling the remaining height (e.g. home's centred placeholder uses
-    `flex-1`); pages that just stack content at the top need no extra
-    classes.
+    filling the remaining height; pages that just stack content at the
+    top need no extra classes.
   -->
   <main class="flex flex-1 flex-col overflow-auto py-4 pr-3 pl-[var(--page-gutter)]">
     {@render children()}
   </main>
 </div>
-
-<style>
-  .active {
-    color: var(--color-accent);
-  }
-</style>

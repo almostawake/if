@@ -1,8 +1,8 @@
 <!--
-  Standard header for any "main" page inside the (app) layout. Render at
-  the top of the page, before the page's content.
+  Standard header for any "main" page inside the /admin layout. Render
+  at the top of the page, before the page's content.
 
-    <PageHeader title="whitelisted users" description="…" />
+    <PageHeader title="admins" description="…" />
 
   Spacing (consistent across all pages):
     pt-4   <- on the page wrapper, above the header

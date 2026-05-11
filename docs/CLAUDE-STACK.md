@@ -19,7 +19,7 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | Icons | **lucide-svelte** | De-facto standard, huge set, tree-shakes. |
 | State | **Class-based rune stores** | One class per domain, `$state` + methods + `$derived` co-located. See "State pattern" below. |
 | Backend | **Firebase** — Auth, Firestore, Functions, Storage | Same as reference app. All resources in `australia-southeast1` (Sydney) — see "Region" below. |
-| Auth (default) | **Firebase Auth — Email Link sign-in** + `allowedEmails` whitelist in Firestore | Zero passwords, no OAuth consent screen, easy to administrate from the in-app users page. Same flow for owner and end users — no admin/non-admin split. See ../CLAUDE.md "Auth & deploy" for details. |
+| Auth (default) | **Firebase Auth — Email Link sign-in** + `allowedAdmins` whitelist in Firestore | Gates `/admin/*` only. End users at `/` are anonymous (no sign-in). Zero passwords, no OAuth consent screen, admins self-administer from `/admin`. See ../CLAUDE.md "Auth & deploy → flow 1" for details. |
 | Validation | **Zod** | Used at every I/O boundary: form → Firestore, LLM response → typed object, scraped fields → typed object. |
 | LLM | **Gemini API** (via a Cloud Function that holds the key) | Single LLM SDK across the stack. Key lives server-side. Costs are real — no free tier to hide behind. |
 | Scraping (simple) | `fetch` from a Cloud Function | CORS-safe, no dependencies, use whenever a plain HTTP body is enough. |

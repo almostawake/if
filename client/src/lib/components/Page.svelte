@@ -1,15 +1,15 @@
 <!--
-  Standard wrapper for any "main" page inside the (app) layout. Owns the
-  page chrome — gutter/top spacing, header (title + optional description
-  + divider), and the gap to first content. Pages just declare their
-  title, description, and content:
+  Standard wrapper for any "main" page inside the /admin layout. Owns
+  the page chrome — gutter/top spacing, header (title + optional
+  description + divider), and the gap to first content. Pages just
+  declare their title, description, and content:
 
-    <Page title="home" description="…">
+    <Page title="admins" description="…">
       <p>page content here</p>
     </Page>
 
   The content slot is itself a flex-column that flex-fills <main>. Pages
-  that want to center content (like home's placeholder) can use
+  that want to center content can use
   `class="flex flex-1 items-center justify-center"` on a child; pages
   that just stack rows from the top need no extra classes.
 -->
