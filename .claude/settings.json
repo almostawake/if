@@ -6,7 +6,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/block-direct-auth.mjs"
+            "command": "node .claude/hook-block-direct-auth.mjs"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hook-session-namer.mjs"
           }
         ]
       }
