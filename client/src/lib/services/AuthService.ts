@@ -26,6 +26,14 @@ export const AuthService = {
     // (Firebase doesn't put it in the link, to prevent session-fixation
     // attacks where someone forwards their link to a victim).
     window.localStorage.setItem(PENDING_EMAIL_KEY, email);
+
+    // Local-dev convenience: no email is actually sent in the auth
+    // emulator. Poll its oobCodes endpoint for the link we just created
+    // and navigate there ourselves. Prod has no /emulator/v1/* route, so
+    // the explicit DEV guard keeps this dead code in production.
+    if (import.meta.env.DEV) {
+      await followEmulatorLink(email);
+    }
   },
 
   isLink(href: string): boolean {
@@ -58,3 +66,39 @@ export const AuthService = {
     return onAuthStateChanged(auth, cb);
   }
 };
+
+/**
+ * Dev-only. Polls the Firebase Auth emulator's pending OOB codes for up
+ * to 5s, picks the matching email-link entry, and navigates the window
+ * to its `oobLink` so the user doesn't have to copy-paste from a log.
+ */
+async function followEmulatorLink(email: string): Promise<void> {
+  const { auth } = getFirebase();
+  const projectId = auth.app.options.projectId;
+  if (!projectId) return;
+  const url = `http://127.0.0.1:9099/emulator/v1/projects/${projectId}/oobCodes`;
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const { oobCodes } = (await res.json()) as {
+          oobCodes: Array<{ email: string; requestType: string; oobLink: string }>;
+        };
+        const match = oobCodes
+          .filter((c) => c.email === email && c.requestType === 'EMAIL_SIGNIN')
+          .pop();
+        if (match?.oobLink) {
+          window.location.href = match.oobLink;
+          return;
+        }
+      }
+    } catch {
+      // Endpoint not reachable — keep trying. We're in DEV mode by guard.
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  // Fell through: leave the user on the "check your email" screen so
+  // they can grab the link manually (e.g. emulator UI hidden behind a
+  // firewall in some setup).
+}

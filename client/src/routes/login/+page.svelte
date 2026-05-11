@@ -35,7 +35,7 @@
   }
 </script>
 
-<div class="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
+<div class="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6">
   {#if !sent}
     <form onsubmit={submit} class="space-y-3">
       {#if denied}
@@ -43,18 +43,17 @@
           that email isn't on the admin list. ask an existing admin to add you.
         </div>
       {/if}
-      <label for="email" class="section-label block">email</label>
       <div class="flex items-center gap-2">
         <input
           id="email"
-          class="tx-input w-72"
+          class="tx-input w-[360px]"
           type="email"
           autocomplete="email"
           required
           bind:value={email}
           placeholder="you@example.com"
         />
-        <button class="tx-btn" type="submit" disabled={sending || !email.trim()}>
+        <button class="tx-btn whitespace-nowrap" type="submit" disabled={sending || !email.trim()}>
           {sending ? 'sending…' : 'send link'}
         </button>
       </div>
