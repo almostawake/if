@@ -71,12 +71,14 @@ export const AuthService = {
  * Dev-only. Polls the Firebase Auth emulator's pending OOB codes for up
  * to 5s, picks the matching email-link entry, and navigates the window
  * to its `oobLink` so the user doesn't have to copy-paste from a log.
+ *
+ * Hardcoded `demo-not-required` — that's the project id the emulator
+ * runs under (see `npm run start:emulators` → `firebase --project
+ * demo-not-required ...`). The Firebase SDK's `app.options.projectId`
+ * is the *prod* project (from client/.env) so we can't reuse it here.
  */
 async function followEmulatorLink(email: string): Promise<void> {
-  const { auth } = getFirebase();
-  const projectId = auth.app.options.projectId;
-  if (!projectId) return;
-  const url = `http://127.0.0.1:9099/emulator/v1/projects/${projectId}/oobCodes`;
+  const url = 'http://localhost:9099/emulator/v1/projects/demo-not-required/oobCodes';
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
     try {

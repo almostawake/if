@@ -29,8 +29,8 @@ export function getFirebase() {
       // Emulator wiring. The `disableWarnings` flag silences the giant red
       // banner that the auth SDK injects in dev — useful info, but noisy
       // for our purposes.
-      connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-      connectFirestoreEmulator(db, '127.0.0.1', 8080);
+      connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+      connectFirestoreEmulator(db, 'localhost', 8080);
     }
   }
   return { app: app!, auth: auth!, db: db! };
