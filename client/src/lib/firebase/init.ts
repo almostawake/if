@@ -6,10 +6,19 @@ import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase
 // convention for "demo project" mode — no real Firebase project needed for
 // `npm run start:emulators`. Production builds override these via the
 // VITE_FIREBASE_* env vars in client/.env.
+//
+// `projectId` is force-pinned to `demo-not-required` in DEV regardless of
+// what client/.env says: the emulator hub, firestore.rules, and
+// cmd-seed-admin.mjs all live under that id, and the Firestore emulator
+// namespaces data + rule evaluation per requested projectId even in
+// single-project mode — so a real prod projectId in client/.env splits the
+// namespace and admin reads 403 against an empty `allowedAdmins`.
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? 'demo-key',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? 'demo-not-required.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'demo-not-required',
+  projectId: import.meta.env.DEV
+    ? 'demo-not-required'
+    : (import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'demo-not-required'),
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ?? 'demo-not-required.appspot.com',
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? '000000000000',
   appId: import.meta.env.VITE_FIREBASE_APP_ID ?? '1:000000000000:web:0000000000000000000000'
