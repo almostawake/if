@@ -27,7 +27,7 @@ The template has **two user groups**, and only one of them signs in:
 
 The `/admin` surface is for managing the app itself (today: the admin whitelist; later: scopes, integrations, etc.). End users never visit it.
 
-**Bootstrap:** the project owner's email must exist in `/allowedAdmins/{lowercased-email}` before first sign-in. Seed once at first deploy (or in the emulator — see "Admin whitelist seed" below). Once one admin is in, they add others from `/admin` itself; the Firestore rule lets any admin read/write the list (admins manage admins). If the list is ever emptied, recovery requires out-of-band access (Firebase Console / Admin SDK).
+**Bootstrap:** the project owner's email must exist in `/allowedAdmins/{lowercased-email}` before first sign-in. The emulator auto-seeds the owner via `cmd-seed-admin.mjs` on `npm run start:emulators`; prod needs a one-time manual seed at first deploy. Once one admin is in, they add others from `/admin` itself; the Firestore rule lets any admin read/write the list (admins manage admins). If the list is ever emptied, recovery requires out-of-band access (Firebase Console / Admin SDK).
 
 **Don't conflate `allowedAdmins` with end-user state.** `allowedAdmins` gates a UI surface; it isn't a user record. If a feature later needs per-end-user state, that's a separate `/users/{uid}` collection keyed by Firebase Auth uid — distinct from `allowedAdmins`.
 
@@ -99,7 +99,7 @@ See **docs/CLAUDE-API.md** for the full convention before adding any inbound end
 ## Firebase emulators & dev server
 See **docs/CLAUDE-EMULATORS.md**. Highlights:
 - Always use `npm run start:emulators` / `npm run start:client` — never `firebase` commands directly.
-- On first emulator interaction in a session, **verify the project owner from `.env.auth.json` is in `allowedAdmins`**; seed if missing (ask first).
+- Admin whitelist is auto-seeded on `npm run start:emulators` (see CLAUDE-EMULATORS.md). Magic sign-in link is auto-followed in DEV. No manual fetching needed in the happy path.
 - Don't deploy unless the user explicitly asks.
 
 ## Data model conventions

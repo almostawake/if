@@ -13,12 +13,14 @@
   let { children }: { children: Snippet } = $props();
   let menuOpen = $state(false);
 
-  // Gate for /admin/*. Three states:
+  // Gate for /admin/*. Three states once `loaded` resolves:
   //   no user           → /login
   //   user, not admin   → sign out, /login?denied=1
   //   user, admin       → render the page
-  // We wait for `loaded` (auth observer + admin check both done) to
-  // avoid a redirect flicker on refresh.
+  // The template below is also gated on `loaded && isAdmin === true`,
+  // so admin chrome (menu, signed-in email, etc.) never paints for
+  // non-admins. Without that gate the layout flashed briefly before
+  // this effect's redirect could fire.
   $effect(() => {
     if (!authStore.loaded) return;
     if (!authStore.user) {
@@ -57,6 +59,7 @@
   if (!target.closest('[data-menu-root]')) closeMenu();
 }} />
 
+{#if authStore.loaded && authStore.isAdmin === true}
 <div class="flex min-h-screen flex-col">
   <header class="flex h-16 items-center border-b border-border bg-bg-soft px-3">
     <div data-menu-root class="relative">
@@ -119,3 +122,4 @@
     {@render children()}
   </main>
 </div>
+{/if}

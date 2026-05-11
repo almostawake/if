@@ -26,39 +26,30 @@ Verify shutdown: `lsof -i :4000 -i :4400 -i :9099 -i :5001 -i :8080 -i :9199 >/d
 
 ---
 
-## Admin whitelist seed — verify on every emulator startup
+## Admin whitelist seed
 
-Only `/admin` is gated; end users at `/` are anonymous. The `/admin` gate rejects sign-in unless the user's email exists at Firestore `/allowedAdmins/{email}` — on a fresh `emulator-data/` this collection is empty, so admin logins silently bounce.
+Only `/admin` is gated; end users at `/` are anonymous. The gate rejects sign-in unless the user's email exists at Firestore `/allowedAdmins/{email}`.
 
-**Mandate (do this whenever you've just started, or first interacted with, the emulators in a session):** verify the project owner is on the admin whitelist. The owner's identity lives in `.env.auth.json` at the project root — read the `email` field only (NOT the access_token; see ../CLAUDE.md "Auth & deploy → flow 2"). If `.env.auth.json` doesn't exist, the project hasn't been auth'd yet — say so and stop; don't fabricate an email.
+**Auto-seeded on every `npm run start:emulators`** by `cmd-seed-admin.mjs` — backgrounded at emulator start, waits for Firestore readiness, reads the owner's email from `.env.auth.json`, writes the doc if missing. Idempotent. No action required from you on a normal start.
 
-```sh
-OWNER=$(jq -r '.email // empty' .env.auth.json 2>/dev/null)
-[ -z "$OWNER" ] && echo "no .env.auth.json email — ask the user before seeding" && exit
-# Is the owner already whitelisted?
-curl -s -H "Authorization: Bearer owner" \
-  "http://localhost:8080/v1/projects/demo-not-required/databases/(default)/documents/allowedAdmins/$OWNER" \
-  | jq 'if .name then "seeded: \(.fields.email.stringValue)" else "MISSING" end'
-```
-
-If the result is `MISSING`, surface that to the user and ask whether to seed `$OWNER` as admin (don't auto-seed — give them a chance to use a different email). On confirmation:
+To add a *different* email manually (e.g. seeding a second admin before they can be added through `/admin` itself):
 
 ```sh
-EMAIL=$OWNER  # or whatever the user said
+EMAIL=alice@example.com
 curl -s -X POST -H "Authorization: Bearer owner" -H "Content-Type: application/json" \
   "http://localhost:8080/v1/projects/demo-not-required/databases/(default)/documents/allowedAdmins?documentId=$EMAIL" \
   -d "{\"fields\":{\"email\":{\"stringValue\":\"$EMAIL\"},\"addedAt\":{\"integerValue\":\"$(date +%s)000\"},\"addedBy\":{\"stringValue\":\"bootstrap\"}}}"
 ```
 
-Seeding is a *precondition* for the email-link flow, not a bypass — the user still does the link dance.
-
-**Multi-account note:** if the project has additional `.env.auth.<email>.json` files, those represent other Google identities for outbound GCP calls. They don't all need to be on the admin whitelist — only the people you want clicking through `/admin`. If the user is operating as a non-default identity (`ACCOUNT_EMAIL=alice@x.com …`), apply the same check for `alice@x.com`.
+The `Authorization: Bearer owner` header is the emulator's admin bypass — skips security rules for local seeding.
 
 ---
 
-## Magic sign-in link — no email is sent locally
+## Magic sign-in link
 
-The link sits in the auth emulator. After the user clicks "send link", fetch it and pass it to them to paste into the browser:
+**Auto-followed in DEV** by `AuthService.sendLink` — after sending, the app polls the auth emulator's `oobCodes` endpoint for up to 5s and navigates the window to the matching link. The user types their email, clicks "send link", and lands signed in.
+
+If auto-follow ever fails (emulator paused, network hiccup), grab the link manually:
 
 ```sh
 curl -s http://localhost:9099/emulator/v1/projects/demo-not-required/oobCodes \
