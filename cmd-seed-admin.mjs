@@ -12,6 +12,16 @@
 // (`Authorization: Bearer owner`) to skip security rules.
 
 import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Resolve .env.auth.json relative to this script's own location, not
+// process.cwd(). npm scripts normally run with cwd at the project root,
+// but `npm --prefix`, certain hooks, and some launchers don't — and
+// when that happened on a fresh VM, existsSync('.env.auth.json') was
+// returning false even though the file was there.
+const PROJECT_ROOT = dirname(fileURLToPath(import.meta.url));
+const AUTH_FILE = join(PROJECT_ROOT, '.env.auth.json');
 
 const PROJECT_ID = 'demo-not-required';
 const FIRESTORE = 'http://localhost:8080';
@@ -33,19 +43,19 @@ async function main() {
 }
 
 function readOwnerEmail() {
-  if (!existsSync('.env.auth.json')) {
-    log('.env.auth.json missing — skipping seed (run `npm run auth` first)');
+  if (!existsSync(AUTH_FILE)) {
+    log(`${AUTH_FILE} missing — skipping seed (run \`npm run auth\` first)`);
     return null;
   }
   try {
-    const { email } = JSON.parse(readFileSync('.env.auth.json', 'utf8'));
+    const { email } = JSON.parse(readFileSync(AUTH_FILE, 'utf8'));
     if (!email) {
-      log('.env.auth.json has no `email` field — skipping seed');
+      log(`${AUTH_FILE} has no \`email\` field — skipping seed`);
       return null;
     }
     return email;
   } catch (e) {
-    log(`.env.auth.json unreadable: ${e.message} — skipping seed`);
+    log(`${AUTH_FILE} unreadable: ${e.message} — skipping seed`);
     return null;
   }
 }
