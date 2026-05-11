@@ -9,7 +9,6 @@ Read the relevant topic file before working in its area:
 - **docs/CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
 - **docs/CLAUDE-API.md** — inbound HTTP API conventions. Read before adding any HTTP endpoint (webhook, server-to-server, etc.).
 - **docs/CLAUDE-EMULATORS.md** — Firebase emulator & dev-server operations. Read before starting/stopping emulators, seeding data, or driving the app in a browser.
-- **docs/CLAUDE-CHROME.md** — chrome-devtools MCP, tab marking, browser vs WebFetch. Read before opening or driving any page in the browser.
 
 ## Non-technical Audience
 
@@ -94,7 +93,7 @@ See **docs/CLAUDE-API.md** for the full convention before adding any inbound end
 
 ## Test UI changes
 - Test significant UI changes before completing your turn. Use screenshots to verify layout/alignment.
-- Drive the browser via **chrome-devtools MCP only**. See **docs/CLAUDE-CHROME.md** for the full convention (tab marking, allowed/avoided APIs, browser vs WebFetch).
+- Drive the browser via **chrome-devtools MCP only** (configured at user scope; installed by `aa/n` for new users). Conventions live in your personal `~/.claude/CLAUDE.md`.
 - Make → verify → fix → verify — this tight loop catches bugs that code review alone misses.
 
 ## Firebase emulators & dev server
