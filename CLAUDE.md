@@ -81,7 +81,7 @@ See **docs/CLAUDE-API.md** for the full convention before adding any inbound end
 
 ## User requirements
 - If the user asks for something that will break the architecture or create debt, suggest alternatives from docs/CLAUDE-STACK.md first.
-- If new patterns are needed, select on the basis of best-practice from senior devs and **prefer LLM-friendly / LLM-reliable technologies**. The whole point of this project is to pick a stack that LLMs produce correct code for on the first try.
+- If new patterns are needed, select on the basis of best-practice from senior devs and **prefer small, LLM-friendly / LLM-reliable architectures — collapse over split when in doubt**. The whole point of this project is to pick a stack that LLMs produce correct code for on the first try.
 
 ## Before committing
 - Run `npm run check` before completing any code-centric task/conversation. This runs `svelte-check` + `tsc` + `eslint`.

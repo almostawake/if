@@ -7,6 +7,7 @@ import {
   query,
   orderBy
 } from 'firebase/firestore';
+import type { User as FbUser } from 'firebase/auth';
 import { getFirebase } from '$lib/firebase/init';
 import type { User } from '$types/User';
 
@@ -44,6 +45,7 @@ class UsersStore {
     const { db } = getFirebase();
     await setDoc(doc(db, 'users', e), {
       email: e,
+      admin: true,
       addedAt: Date.now(),
       addedBy
     } satisfies User);
@@ -52,6 +54,20 @@ class UsersStore {
   remove = async (email: string) => {
     const { db } = getFirebase();
     await deleteDoc(doc(db, 'users', email.trim().toLowerCase()));
+  };
+
+  // Called once per successful email-link sign-in. Enriches the
+  // existing whitelist row with the now-available Firebase uid and
+  // the current sign-in timestamp. setDoc with merge so we don't
+  // clobber `admin`, `addedBy`, etc.
+  recordSignIn = async (user: FbUser) => {
+    if (!user.email) return;
+    const { db } = getFirebase();
+    await setDoc(
+      doc(db, 'users', user.email.toLowerCase()),
+      { uid: user.uid, lastSignInAt: Date.now() },
+      { merge: true }
+    );
   };
 }
 

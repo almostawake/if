@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { AuthService } from '$lib/services/AuthService';
+  import { usersStore } from '$lib/state/UsersStore.svelte';
 
   let status = $state<'working' | 'need-email' | 'error' | 'done'>('working');
   let error = $state<string | null>(null);
@@ -15,7 +16,11 @@
       return;
     }
     try {
-      await AuthService.completeEmailLink(href);
+      const user = await AuthService.completeEmailLink(href);
+      // Best-effort enrichment of the whitelist row with uid +
+      // lastSignInAt. Failure shouldn't block the redirect — the
+      // user is signed in either way; the next sign-in will retry.
+      try { await usersStore.recordSignIn(user); } catch { /* swallow */ }
       status = 'done';
       goto('/admin', { replaceState: true });
     } catch (e) {
@@ -34,7 +39,8 @@
   async function submitEmail(e: SubmitEvent) {
     e.preventDefault();
     try {
-      await AuthService.completeEmailLink(window.location.href, email.trim());
+      const user = await AuthService.completeEmailLink(window.location.href, email.trim());
+      try { await usersStore.recordSignIn(user); } catch { /* swallow */ }
       status = 'done';
       goto('/admin', { replaceState: true });
     } catch (err) {

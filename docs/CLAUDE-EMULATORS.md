@@ -38,7 +38,7 @@ To add a *different* email manually (e.g. seeding a second user before they can 
 EMAIL=alice@example.com
 curl -s -X POST -H "Authorization: Bearer owner" -H "Content-Type: application/json" \
   "http://localhost:8080/v1/projects/demo-not-required/databases/(default)/documents/users?documentId=$EMAIL" \
-  -d "{\"fields\":{\"email\":{\"stringValue\":\"$EMAIL\"},\"addedAt\":{\"integerValue\":\"$(date +%s)000\"},\"addedBy\":{\"stringValue\":\"bootstrap\"}}}"
+  -d "{\"fields\":{\"email\":{\"stringValue\":\"$EMAIL\"},\"admin\":{\"booleanValue\":true},\"addedAt\":{\"integerValue\":\"$(date +%s)000\"},\"addedBy\":{\"stringValue\":\"bootstrap\"}}}"
 ```
 
 The `Authorization: Bearer owner` header is the emulator's admin bypass — skips security rules for local seeding.

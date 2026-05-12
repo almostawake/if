@@ -87,6 +87,7 @@ async function seed(email) {
   const body = {
     fields: {
       email: { stringValue: email },
+      admin: { booleanValue: true },
       addedAt: { integerValue: String(Date.now()) },
       addedBy: { stringValue: 'bootstrap' },
     },

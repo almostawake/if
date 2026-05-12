@@ -7,15 +7,21 @@
  * at invite time (Firebase uid doesn't exist until first sign-in).
  * Email-link auth keys on email anyway, so it's the natural id here.
  *
- * Lifecycle:
- *  - Invited: written by /admin (or seeded at bootstrap) with `addedAt` + `addedBy`.
- *  - Signed in: same row — no separate "users vs allowed" split. Add fields
- *    here (e.g. `lastSignInAt`) when there's a real need; types under
- *    `functions/src/types/` are the single source of truth, shared with
- *    the client via the `$types` alias.
+ * Fields are split into two phases:
+ *  - Invite time: { email, admin, addedAt, addedBy } — written by
+ *    /admin add or the bootstrap seed.
+ *  - First sign-in onwards: { uid, lastSignInAt } get filled in (and
+ *    `lastSignInAt` refreshed on every subsequent sign-in).
+ *
+ * `admin: true` on every row today — every user IS an admin. The
+ * field exists for explicit visibility in the Firestore console and
+ * to future-proof for non-admin user records later.
  */
 export interface User {
   email: string;
+  admin: boolean;
   addedAt: number;
   addedBy: string;
+  uid?: string;
+  lastSignInAt?: number;
 }
