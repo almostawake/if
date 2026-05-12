@@ -129,23 +129,28 @@ async function refresh(cred) {
 }
 
 function openBrowser(url) {
-  // Use macOS `open -a APP URL` to direct the URL to a specific app
-  // bundle. Direct spawn of the launcher's executable script worked
-  // sometimes, but Chrome's process-singleton can route the URL to
-  // whichever Chrome instance grabbed the LaunchServices URL handler
-  // first (often regular Chrome, not our Claude profile). `open -a`
-  // is the macOS-blessed path that reliably hands the URL to the
-  // named app.
-  const launcherApp = path.join(
+  // Direct exec of the launcher's bash executable, NOT `open -a APP URL`.
+  // The bash receives the URL as `$1`, forwards via `"$@"` into Chrome with
+  // `--user-data-dir=Chrome-Claude`, so the URL lands in our profile
+  // regardless of which app macOS treats as the default http/https handler.
+  //
+  // We tried `open -a APP URL` (commit d425944). It went sideways on fresh
+  // macOS users: `open -a` doesn't pass URL via argv to a bash-in-bundle
+  // (argc=0 inside the script), so macOS falls through and delivers the URL
+  // to the default URL handler. On a fresh user that's Safari — the OAuth
+  // page opens in Safari while the launcher's bash separately spawns
+  // Chrome-Claude empty. Nothing reaches Chrome-Claude. See aa/CLAUDE.md
+  // for the full saga.
+  const launcherExec = path.join(
     process.env.HOME || '',
-    'Applications/Chrome with Claude Code.app'
+    'Applications/Chrome with Claude Code.app/Contents/MacOS/Chrome with Claude Code'
   );
-  if (fs.existsSync(launcherApp)) {
+  if (fs.existsSync(launcherExec)) {
     console.error(`   (opening in Chrome with Claude Code)`);
-    spawn('open', ['-a', launcherApp, url], { detached: true, stdio: 'ignore' }).unref();
+    spawn(launcherExec, [url], { detached: true, stdio: 'ignore' }).unref();
     return;
   }
-  console.error(`   (launcher not found at ${launcherApp} — using default browser)`);
+  console.error(`   (launcher not found at ${launcherExec} — using default browser)`);
   const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
   spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
 }
