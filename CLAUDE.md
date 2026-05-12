@@ -18,20 +18,18 @@ The target user is a non-developer — a business analyst, project manager, or t
 
 Three independent auth flows live in this project. Don't conflate them — each fails differently when you do.
 
-### 1. Admin sign-in — the **only** gated surface — Email Link + `allowedAdmins`
+### 1. Admin sign-in — the **only** gated surface — Email Link + `users` whitelist
 
-The template has **two user groups**, and only one of them signs in:
+The template has **two groups**, and only one of them signs in:
 
 - **End users at `/`** (and any other non-`/admin/*` route): **anonymous**. No sign-in, no Firestore writes from them. Whatever feature the template-user builds lives here. Don't gate `/` and don't add a login flow there unless explicitly asked — public-by-default is the template's chosen shape.
-- **Admins at `/admin/*`**: sign in via **Firebase Auth Email Link**, gated by an `allowedAdmins` whitelist in Firestore. Flow: enter email → magic link by email → click → signed in iff `request.auth.token.email.lower()` exists in `/allowedAdmins/{email}`. Magic-link only — no passwords, no OAuth.
+- **Signed-in users at `/admin/*`**: sign in via **Firebase Auth Email Link**, gated by the `users` collection in Firestore (doc id = lowercased email). Flow: enter email → magic link by email → click → signed in iff `request.auth.token.email.lower()` exists in `/users/{email}`. Magic-link only — no passwords, no OAuth.
 
-The `/admin` surface is for managing the app itself (today: the admin whitelist; later: scopes, integrations, etc.). End users never visit it.
+`/admin` is the management surface for the app itself (today: the user whitelist; later: scopes, integrations, etc.). End users never visit it. There is no separate "admin" tier — anyone in `users` can sign in to `/admin` and edit the list (users manage users). The doc id is email, not Firebase uid, because email is the only stable identifier we have at invite time (the uid doesn't exist until first sign-in).
 
-**Bootstrap:** the project owner's email must exist in `/allowedAdmins/{lowercased-email}` before first sign-in. The emulator auto-seeds the owner via `cmd-seed-admin.mjs` on `npm run start:emulators`; prod needs a one-time manual seed at first deploy. Once one admin is in, they add others from `/admin` itself; the Firestore rule lets any admin read/write the list (admins manage admins). If the list is ever emptied, recovery requires out-of-band access (Firebase Console / Admin SDK).
+**Bootstrap:** the project owner's email must exist in `/users/{lowercased-email}` before first sign-in. The emulator auto-seeds the owner via `cmd-seed-user.mjs` on `npm run start:emulators`; prod needs a one-time manual seed at first deploy. If the list is ever emptied (everyone removes everyone), recovery requires out-of-band access (Firebase Console / Admin SDK).
 
-**Don't conflate `allowedAdmins` with end-user state.** `allowedAdmins` gates a UI surface; it isn't a user record. If a feature later needs per-end-user state, that's a separate `/users/{uid}` collection keyed by Firebase Auth uid — distinct from `allowedAdmins`.
-
-**Don't add Google OAuth, password auth, or other sign-in providers for admins without asking.** Email Link is the chosen pattern: zero passwords, no consent-screen setup, easy to administrate. Point users here if they ask for "logins".
+**Don't add Google OAuth, password auth, or other sign-in providers without asking.** Email Link is the chosen pattern: zero passwords, no consent-screen setup, easy to administrate. Point users here if they ask for "logins".
 
 **On the Firebase Web "API key" (`AIzaSy…`) in `client/.env`:** it's a misnamed *public project identifier*, not a credential — see [Firebase docs](https://firebase.google.com/docs/projects/api-keys). Safe to ship in the bundle. Real auth is Firebase Auth ID tokens + Firestore security rules. The file holds project-specific Firebase Web config (`VITE_FIREBASE_*`); seed it from your project's Firebase console (or the bootstrap of your choice) before deploying. Gitignored — never commit.
 
@@ -99,12 +97,14 @@ See **docs/CLAUDE-API.md** for the full convention before adding any inbound end
 ## Firebase emulators & dev server
 See **docs/CLAUDE-EMULATORS.md**. Highlights:
 - Always use `npm run start:emulators` / `npm run start:client` — never `firebase` commands directly.
-- Admin whitelist is auto-seeded on `npm run start:emulators` (see CLAUDE-EMULATORS.md). Magic sign-in link is auto-followed in DEV. No manual fetching needed in the happy path.
+- The `users` whitelist is auto-seeded on `npm run start:emulators` (see CLAUDE-EMULATORS.md). Magic sign-in link is auto-followed in DEV. No manual fetching needed in the happy path.
 - Don't deploy unless the user explicitly asks.
 
 ## Data model conventions
-- Every Firestore-backed type must have a `@collection` JSDoc tag with its full path (e.g. `@collection users/{uid}/transactions`). Update when renaming/moving collections.
-- When creating a new Firestore collection, add the type to `src/lib/types/` with the `@collection` tag.
+- All Firestore-backed types live in **`functions/src/types/`** — single source of truth, shared with the client via the `$types` alias (configured in `client/svelte.config.js`). Files there must stay browser-safe (pure TS types or zod schemas, no `firebase-admin` / Node-only imports).
+- One PascalCase file per type (e.g. `User.ts`). Multiple related types may share a file, each with its own `@collection` tag.
+- Every Firestore-backed type carries a `@collection` JSDoc tag with its full path (e.g. `@collection users/{email}` or `@collection users/{uid}/transactions`). Update the tag when renaming/moving collections.
+- Client imports types as `import type { User } from '$types/User'`.
 
 ## General
 - Stop early on dead ends — if automation hits a blocking dialog or fails 2-3 times, pivot approach or ask. Don't retry the same thing.

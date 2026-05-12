@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // Backgrounded by `npm run start:emulators`. Waits for the Firestore
 // emulator to come up, reads the project owner's email from
-// .env.auth.json, and seeds `/allowedAdmins/{email}` if missing. Idempotent.
+// .env.auth.json, and seeds `/users/{email}` if missing. Idempotent.
 //
-// Why: a fresh `emulator-data/` has an empty `allowedAdmins` collection,
-// so the /admin email-link sign-in silently bounces until something
+// Why: a fresh `emulator-data/` has an empty `users` collection, so
+// the /admin email-link sign-in silently bounces until something
 // seeds the owner. Doing it on every emulator start removes the
 // dependency on the LLM remembering to run a manual probe.
 //
-// Pure Node — no `jq`, no `curl`. Uses the admin-bypass header
-// (`Authorization: Bearer owner`) to skip security rules.
+// Pure Node — no `jq`, no `curl`. Uses the emulator's admin-bypass
+// header (`Authorization: Bearer owner`) to skip security rules.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -35,11 +35,11 @@ async function main() {
 
   const present = await isSeeded(email);
   if (present) {
-    log(`${email} already on allowedAdmins`);
+    log(`${email} already on users`);
     return;
   }
   await seed(email);
-  log(`seeded ${email} on allowedAdmins`);
+  log(`seeded ${email} on users`);
 }
 
 function readOwnerEmail() {
@@ -75,7 +75,7 @@ async function waitForFirestore() {
 }
 
 async function isSeeded(email) {
-  const url = `${FIRESTORE}/v1/projects/${PROJECT_ID}/databases/(default)/documents/allowedAdmins/${encodeURIComponent(email)}`;
+  const url = `${FIRESTORE}/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${encodeURIComponent(email)}`;
   const res = await fetch(url, { headers: { Authorization: 'Bearer owner' } });
   if (res.status === 200) return true;
   if (res.status === 404) return false;
@@ -83,7 +83,7 @@ async function isSeeded(email) {
 }
 
 async function seed(email) {
-  const url = `${FIRESTORE}/v1/projects/${PROJECT_ID}/databases/(default)/documents/allowedAdmins?documentId=${encodeURIComponent(email)}`;
+  const url = `${FIRESTORE}/v1/projects/${PROJECT_ID}/databases/(default)/documents/users?documentId=${encodeURIComponent(email)}`;
   const body = {
     fields: {
       email: { stringValue: email },
@@ -106,7 +106,7 @@ async function seed(email) {
 
 function log(msg) {
   // Tagged stderr — emulator stdout (the actual logs) stays clean.
-  process.stderr.write(`[seed-admin] ${msg}\n`);
+  process.stderr.write(`[seed-user] ${msg}\n`);
 }
 
 function sleep(ms) {

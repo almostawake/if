@@ -9,10 +9,10 @@ import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase
 //
 // `projectId` is force-pinned to `demo-not-required` in DEV regardless of
 // what client/.env says: the emulator hub, firestore.rules, and
-// cmd-seed-admin.mjs all live under that id, and the Firestore emulator
+// cmd-seed-user.mjs all live under that id, and the Firestore emulator
 // namespaces data + rule evaluation per requested projectId even in
 // single-project mode — so a real prod projectId in client/.env splits the
-// namespace and admin reads 403 against an empty `allowedAdmins`.
+// namespace and admin reads 403 against an empty `users` collection.
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? 'demo-key',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? 'demo-not-required.firebaseapp.com',

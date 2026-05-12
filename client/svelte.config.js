@@ -10,6 +10,13 @@ export default {
       fallback: 'index.html',
       precompress: false,
       strict: true
-    })
+    }),
+    // `$types` resolves to functions/src/types — the single home for
+    // Firestore-backed types (see ../docs/CLAUDE-STACK.md). Files there
+    // must stay browser-safe (pure types or zod schemas, no
+    // firebase-admin / Node-only imports) so this client bundle works.
+    alias: {
+      $types: '../functions/src/types'
+    }
   }
 };

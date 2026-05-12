@@ -19,7 +19,7 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | Icons | **lucide-svelte** | De-facto standard, huge set, tree-shakes. |
 | State | **Class-based rune stores** | One class per domain, `$state` + methods + `$derived` co-located. See "State pattern" below. |
 | Backend | **Firebase** — Auth, Firestore, Functions, Storage | Same as reference app. All resources in `australia-southeast1` (Sydney) — see "Region" below. |
-| Auth (default) | **Firebase Auth — Email Link sign-in** + `allowedAdmins` whitelist in Firestore | Gates `/admin/*` only. End users at `/` are anonymous (no sign-in). Zero passwords, no OAuth consent screen, admins self-administer from `/admin`. See ../CLAUDE.md "Auth & deploy → flow 1" for details. |
+| Auth (default) | **Firebase Auth — Email Link sign-in** + `users` whitelist in Firestore (doc id = lowercased email) | Gates `/admin/*` only. End users at `/` are anonymous (no sign-in). Zero passwords, no OAuth consent screen, signed-in users self-administer from `/admin`. See ../CLAUDE.md "Auth & deploy → flow 1" for details. |
 | Validation | **Zod** | Used at every I/O boundary: form → Firestore, LLM response → typed object, scraped fields → typed object. |
 | LLM | **Gemini API** (via a Cloud Function that holds the key) | Single LLM SDK across the stack. Key lives server-side. Costs are real — no free tier to hide behind. |
 | Scraping (simple) | `fetch` from a Cloud Function | CORS-safe, no dependencies, use whenever a plain HTTP body is enough. |
@@ -65,10 +65,10 @@ The capability layer — `src/lib/services/`, `src/lib/state/`, `src/lib/types/`
 | `src/routes/` | URL → page composition, layouts | `$lib/components`, `$lib/state` |
 | `src/lib/components/` | Presentational + interactive UI | `$lib/state`, `$lib/components/ui` |
 | `src/lib/components/ui/` | shadcn-svelte primitives (owned, editable) | Tailwind, bits-ui |
-| `src/lib/state/` | Rune stores + domain actions | `$lib/services`, `$lib/types` |
-| `src/lib/services/` | Firestore I/O, stateless, `uid`-first | `$lib/types`, firebase SDK |
-| `src/lib/types/` | Pure TS types with `@collection` JSDoc tags | nothing |
-| `src/lib/utils/` | Pure helpers (parsers, id gen, formatters) | `$lib/types` |
+| `src/lib/state/` | Rune stores + domain actions | `$lib/services`, `$types` |
+| `src/lib/services/` | Firestore I/O, stateless, `uid`-first | `$types`, firebase SDK |
+| `$types/*` (= `functions/src/types/`) | Pure TS types + zod schemas with `@collection` JSDoc tags. **Single home, shared client ↔ functions** — must stay browser-safe (no `firebase-admin` / Node-only imports). | nothing |
+| `src/lib/utils/` | Pure helpers (parsers, id gen, formatters) | `$types` |
 
 **Hard rules:**
 - Components **never** import from `services/` directly — they go through `state/`.
@@ -95,8 +95,8 @@ client/
 │   │   ├── state/                   ← class-based rune stores (.svelte.ts)
 │   │   ├── services/                ← Firestore I/O
 │   │   │   └── firebase.ts          ← init singleton + getFirebaseServices()
-│   │   ├── types/                   ← @collection JSDoc tags
 │   │   └── utils/
+│   │   (types live in functions/src/types/, imported as `$types/*`)
 │   ├── app.html
 │   ├── app.css                      ← Tailwind entry
 │   └── app.d.ts
@@ -117,7 +117,7 @@ One file per domain, exported as a singleton. State + actions + derived values c
 ```ts
 // src/lib/state/CategoriesStore.svelte.ts
 import * as CategoryService from '$lib/services/CategoryService'
-import type { Category, CategoryGroup } from '$lib/types/Category'
+import type { Category, CategoryGroup } from '$types/Category'
 import { generateId } from '$lib/utils/generateId'
 
 class CategoriesStore {
@@ -167,7 +167,7 @@ Stateless function modules. `uid` is always the first argument. Firestore batch 
 // src/lib/services/CategoryService.ts
 import { collection, doc, writeBatch } from 'firebase/firestore'
 import { getFirebaseServices } from './firebase'
-import type { Category } from '$lib/types/Category'
+import type { Category } from '$types/Category'
 
 export async function createCategory(uid: string, cat: Category): Promise<void> {
   const { db } = await getFirebaseServices()

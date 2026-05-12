@@ -26,18 +26,18 @@ Verify shutdown: `lsof -i :4000 -i :4400 -i :9099 -i :5001 -i :8080 -i :9199 >/d
 
 ---
 
-## Admin whitelist seed
+## Users whitelist seed
 
-Only `/admin` is gated; end users at `/` are anonymous. The gate rejects sign-in unless the user's email exists at Firestore `/allowedAdmins/{email}`.
+Only `/admin` is gated; end users at `/` are anonymous. The gate rejects sign-in unless the user's email exists at Firestore `/users/{email}`.
 
-**Auto-seeded on every `npm run start:emulators`** by `cmd-seed-admin.mjs` — backgrounded at emulator start, waits for Firestore readiness, reads the owner's email from `.env.auth.json`, writes the doc if missing. Idempotent. No action required from you on a normal start.
+**Auto-seeded on every `npm run start:emulators`** by `cmd-seed-user.mjs` — backgrounded at emulator start, waits for Firestore readiness, reads the owner's email from `.env.auth.json`, writes the doc if missing. Idempotent. No action required from you on a normal start.
 
-To add a *different* email manually (e.g. seeding a second admin before they can be added through `/admin` itself):
+To add a *different* email manually (e.g. seeding a second user before they can be added through `/admin` itself):
 
 ```sh
 EMAIL=alice@example.com
 curl -s -X POST -H "Authorization: Bearer owner" -H "Content-Type: application/json" \
-  "http://localhost:8080/v1/projects/demo-not-required/databases/(default)/documents/allowedAdmins?documentId=$EMAIL" \
+  "http://localhost:8080/v1/projects/demo-not-required/databases/(default)/documents/users?documentId=$EMAIL" \
   -d "{\"fields\":{\"email\":{\"stringValue\":\"$EMAIL\"},\"addedAt\":{\"integerValue\":\"$(date +%s)000\"},\"addedBy\":{\"stringValue\":\"bootstrap\"}}}"
 ```
 
@@ -83,7 +83,7 @@ Sign in goes through the app's email-link flow against the auth emulator's fake-
    - Stop emulators: `lsof -ti :4400 | xargs kill`
    - Delete persisted state: `rm -rf emulator-data/`
    - Start emulators: `npm run start:emulators`
-   - Re-run the admin whitelist seed check above (the `allowedAdmins` collection is gone)
+   - Re-run the users whitelist seed check above (the `users` collection is gone)
    - Reload the page and **log in first** (creates the `users/{uid}` parent doc)
    - Then load data
 

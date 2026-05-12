@@ -8,7 +8,7 @@
   import { goto } from '$app/navigation';
   import type { Snippet } from 'svelte';
   import { authStore } from '$lib/state/AuthStore.svelte';
-  import { allowedAdminsStore } from '$lib/state/AllowedAdminsStore.svelte';
+  import { usersStore } from '$lib/state/UsersStore.svelte';
 
   let { children }: { children: Snippet } = $props();
   let menuOpen = $state(false);
@@ -35,8 +35,8 @@
   // onSnapshot would hit a permission-denied error.
   $effect(() => {
     if (authStore.isAdmin !== true) return;
-    allowedAdminsStore.start();
-    return () => allowedAdminsStore.stop();
+    usersStore.start();
+    return () => usersStore.stop();
   });
 
   function toggleMenu() {
@@ -87,7 +87,7 @@
                 onclick={closeMenu}
                 class="block px-3 py-2 hover:bg-bg-hover"
               >
-                manage admins
+                manage users
               </a>
             </li>
             <li class="border-t border-border">

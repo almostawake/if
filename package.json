@@ -5,7 +5,7 @@
   "scripts": {
     "install:all": "npm i && cd client && npm i && cd ../functions && npm i",
     "build:all": "cd client && npm run build",
-    "start:emulators": "mkdir -p emulator-data && (node cmd-seed-admin.mjs &) && firebase --project demo-not-required emulators:start --only auth,functions,firestore,storage --export-on-exit=emulator-data --import=emulator-data 2>&1 | tee /tmp/firebase-emulator.log",
+    "start:emulators": "mkdir -p emulator-data && (node cmd-seed-user.mjs &) && firebase --project demo-not-required emulators:start --only auth,functions,firestore,storage --export-on-exit=emulator-data --import=emulator-data 2>&1 | tee /tmp/firebase-emulator.log",
     "start:client": "cd client && npm run dev",
     "check": "cd client && npm run check",
     "auth": "node cmd-auth.mjs",

@@ -5,7 +5,7 @@ import { getFirebase } from '$lib/firebase/init';
 
 class AuthStore {
   user = $state<User | null>(null);
-  /** null = not yet known, true/false = result of the admin-whitelist check. */
+  /** null = not yet known, true/false = result of the user-whitelist check. */
   isAdmin = $state<boolean | null>(null);
   loaded = $state(false);
   private unsub: (() => void) | null = null;
@@ -39,7 +39,7 @@ class AuthStore {
   private checkAdmin = async (email: string): Promise<boolean> => {
     try {
       const { db } = getFirebase();
-      const ref = doc(db, 'allowedAdmins', email.toLowerCase());
+      const ref = doc(db, 'users', email.toLowerCase());
       const snap = await getDoc(ref);
       return snap.exists();
     } catch {

@@ -2,19 +2,20 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Whitelist of admin email addresses. An admin can read or mutate
-    // this list iff their own email is already on it — admins manage
-    // admins. End users at `/` are anonymous and never touch this
+    // The single users collection — doc presence == "may sign in to
+    // /admin". A user can read or mutate this list iff their own email
+    // is already on it (users manage users — there is no separate
+    // admin tier). End users at `/` are anonymous and never touch this
     // collection (see CLAUDE.md "Auth & deploy → flow 1").
     //
     // Bootstrap: the provisioner seeds the project owner's email at
     // first deploy so they can use the app on day one. If the list is
     // ever emptied (everyone removes everyone), recovery requires
     // out-of-band access (Firebase Console or Admin SDK).
-    match /allowedAdmins/{emailDocId} {
+    match /users/{emailDocId} {
       allow read, write: if request.auth != null
         && request.auth.token.email != null
-        && exists(/databases/$(database)/documents/allowedAdmins/$(request.auth.token.email.lower()));
+        && exists(/databases/$(database)/documents/users/$(request.auth.token.email.lower()));
     }
 
     // Deny everything else by default.
