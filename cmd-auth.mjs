@@ -129,28 +129,27 @@ async function refresh(cred) {
 }
 
 function openBrowser(url) {
-  // Direct exec of the launcher's bash executable, NOT `open -a APP URL`.
-  // The bash receives the URL as `$1`, forwards via `"$@"` into Chrome with
-  // `--user-data-dir=Chrome-Claude`, so the URL lands in our profile
-  // regardless of which app macOS treats as the default http/https handler.
-  //
-  // We tried `open -a APP URL` (commit d425944). It went sideways on fresh
-  // macOS users: `open -a` doesn't pass URL via argv to a bash-in-bundle
-  // (argc=0 inside the script), so macOS falls through and delivers the URL
-  // to the default URL handler. On a fresh user that's Safari — the OAuth
-  // page opens in Safari while the launcher's bash separately spawns
-  // Chrome-Claude empty. Nothing reaches Chrome-Claude. See aa/CLAUDE.md
-  // for the full saga.
-  const launcherExec = path.join(
+  // `open -a APP --args URL`. The `--args` flag is load-bearing — without
+  // it, `open -a APP URL` doesn't pass URL via argv to a bash-in-bundle
+  // (argc=0 inside the script), macOS falls through to the default URL
+  // handler (Safari on a fresh macOS user), and the OAuth opens in the
+  // wrong app. With `--args`, the bash receives URL as $1, forwards via
+  // "$@" into Chrome with --user-data-dir=Chrome-Claude. LaunchServices
+  // also stamps the launcher's bundle id on the chain so the Dock shows
+  // a single "Chrome with Claude Code" icon. See aa/CLAUDE.md for the
+  // saga — d425944 (open -a without --args, broken) and 5248ca3 (direct
+  // exec, works but loses Dock attribution) are both regressions of
+  // this form.
+  const launcherApp = path.join(
     process.env.HOME || '',
-    'Applications/Chrome with Claude Code.app/Contents/MacOS/Chrome with Claude Code'
+    'Applications/Chrome with Claude Code.app'
   );
-  if (fs.existsSync(launcherExec)) {
+  if (fs.existsSync(launcherApp)) {
     console.error(`   (opening in Chrome with Claude Code)`);
-    spawn(launcherExec, [url], { detached: true, stdio: 'ignore' }).unref();
+    spawn('open', ['-a', launcherApp, '--args', url], { detached: true, stdio: 'ignore' }).unref();
     return;
   }
-  console.error(`   (launcher not found at ${launcherExec} — using default browser)`);
+  console.error(`   (launcher not found at ${launcherApp} — using default browser)`);
   const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
   spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
 }
