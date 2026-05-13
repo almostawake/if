@@ -35,5 +35,9 @@ emulator-data/
 # Stranded export dirs left behind when emulators are killed mid-export.
 firebase-export-*/
 
+# Scratch dir for screenshots, transient notes, anything we don't want
+# committed but might want to keep around between runs.
+.tmp/
+
 # OS
 .DS_Store

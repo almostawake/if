@@ -56,8 +56,8 @@ function verifyState(state: string): boolean {
 }
 
 function configError(): string | null {
-  if (!process.env.GOOGLE_OAUTH_CLIENT_ID) return 'GOOGLE_OAUTH_CLIENT_ID not set in functions/.env';
-  if (!process.env.GOOGLE_OAUTH_CLIENT_SECRET) return 'GOOGLE_OAUTH_CLIENT_SECRET not set in functions/.env';
+  if (!process.env.GOOGLE_HOSTING_CONSENT_ID) return 'GOOGLE_HOSTING_CONSENT_ID not set in functions/.env';
+  if (!process.env.GOOGLE_HOSTING_CONSENT_KEY) return 'GOOGLE_HOSTING_CONSENT_KEY not set in functions/.env';
   if (!consentScopes().length) return 'ADMIN_CONSENTS not set in functions/.env';
   if (!stateSecret()) return 'OAUTH_STATE_SECRET (or fallback CODE_THAT_OTHER_SERVICES_NEED_TO_GET_PAST_OUR_BOUNCER) not set';
   return null;
@@ -65,13 +65,27 @@ function configError(): string | null {
 
 function client(): OAuth2Client {
   return new OAuth2Client(
-    process.env.GOOGLE_OAUTH_CLIENT_ID!,
-    process.env.GOOGLE_OAUTH_CLIENT_SECRET!,
+    process.env.GOOGLE_HOSTING_CONSENT_ID!,
+    process.env.GOOGLE_HOSTING_CONSENT_KEY!,
     redirectUri(),
   );
 }
 
+// Friendly placeholder mirroring /'s "ah, one day a home page here." — shown
+// when the template's been cloned but the OAuth client deets aren't filled in
+// yet. Same centred-faint-text vibe; minimal inline CSS since the function
+// isn't bundled with the SvelteKit Tailwind build.
+function placeholderPage(): string {
+  return `<!doctype html><meta charset=utf-8><title>consent</title>
+<style>html,body{margin:0;padding:0;height:100%}body{display:flex;align-items:center;justify-content:center;padding:0 1.5rem;font:14px/1.5 system-ui,-apple-system,sans-serif;color:#9ca3af}</style>
+<div>consents will need some more setup to work.</div>`;
+}
+
 router.get('/consent', (_req: Request, res: Response) => {
+  if (!process.env.GOOGLE_HOSTING_CONSENT_ID || !process.env.GOOGLE_HOSTING_CONSENT_KEY) {
+    res.status(200).type('html').send(placeholderPage());
+    return;
+  }
   const err = configError();
   if (err) { res.status(500).type('text').send(`Config error: ${err}`); return; }
 
