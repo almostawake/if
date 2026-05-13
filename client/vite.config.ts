@@ -10,6 +10,14 @@ export default defineConfig({
     // Allow Vite to read source files outside `client/` — the `$types`
     // alias points at `../functions/src/types`. Without this, dev hits
     // a 403 from Vite's fs sandbox the first time the alias resolves.
-    fs: { allow: ['..'] }
+    fs: { allow: ['..'] },
+    // Public browser-facing OAuth routes live on the `api` function. In prod,
+    // Firebase Hosting rewrites do this same forwarding. Keeps the URL the
+    // user sees identical in dev and prod (e.g. http://localhost:5173/consent
+    // ↔ https://<project>.web.app/consent).
+    proxy: {
+      '/consent': 'http://localhost:5001/demo-not-required/australia-southeast1/api',
+      '/oauth': 'http://localhost:5001/demo-not-required/australia-southeast1/api'
+    }
   }
 });

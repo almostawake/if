@@ -4,8 +4,12 @@
 // they're separate exports.
 
 import express, {type NextFunction, type Request, type Response} from "express";
+import {initializeApp, getApps} from "firebase-admin/app";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onRequest} from "firebase-functions/v2/https";
+import oauthRouter from "./api/oauth";
+
+if (!getApps().length) initializeApp();
 
 // Pin every function in this codebase to Sydney. Matches the Firestore + Storage region
 // set up by the new-project provisioner. Override per-function only if there's a reason.
@@ -13,6 +17,11 @@ setGlobalOptions({region: "australia-southeast1"});
 
 const app = express();
 app.use(express.json());
+
+// Public browser-facing routes (no bearer required). End users click /consent in
+// their browser — they don't carry the shared secret. Keep this short and explicit;
+// see CLAUDE-API.md → "Public browser-facing routes".
+app.use(oauthRouter);
 
 // Bearer-token gate. Reads the shared secret from functions/.env (Gen 2 auto-loads it).
 // Every route below this middleware requires `Authorization: Bearer <secret>`.
@@ -32,15 +41,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// SCAFFOLD — replace this catch-all with real routes when you add the first one.
-// Real routes look like: `app.get('/widgets', handler)` / `app.post('/widgets', handler)`.
-// After adding real routes, swap this handler for a 404:
-//   app.use((_req, res) => res.status(404).json({error: "not found"}));
-app.use((_req, res) => {
-  res.status(200).json({
-    ok: true,
-    message: "Next, you will add something useful to this API.",
-  });
-});
+app.use((_req, res) => res.status(404).json({error: "not found"}));
 
 export const api = onRequest(app);

@@ -15,9 +15,23 @@ When adding a new inbound endpoint, **always** add it as a route on the existing
 
 ## Auth
 
-Every route is gated by a bearer-token middleware that reads `CODE_THAT_OTHER_SERVICES_NEED_TO_GET_PAST_OUR_BOUNCER` from `functions/.env`. There is no per-route bypass — if a route doesn't need the bearer, it doesn't belong in this function.
+Most routes are gated by a bearer-token middleware that reads `CODE_THAT_OTHER_SERVICES_NEED_TO_GET_PAST_OUR_BOUNCER` from `functions/.env`. The bearer secret is for **external callers** (webhooks, server-to-server, cron pings from outside the project). It is not the right tool for the app's own signed-in users — see "What does NOT live here" below.
 
-The bearer secret is for **external callers** (webhooks, server-to-server, cron pings from outside the project). It is not the right tool for the app's own signed-in users — see "What does NOT live here" below.
+### Public browser-facing routes (the narrow exception)
+
+A short, named allowlist of routes is mounted **above** the bearer middleware and runs without a bearer. Only OAuth-style endpoints qualify: end users open them in a browser, they don't carry the shared secret, and they must work for anonymous visitors before any identity exists. Current allowlist:
+
+- `GET /consent` — kicks off the Google permission flow, 302s to Google
+- `GET /oauth/callback` — Google redirects back here with the auth code; exchange + store
+
+The pattern, in `functions/src/index.ts`:
+
+```ts
+app.use(oauthRouter);  // public — above the gate
+app.use(bearerGate);   // everything below requires the bearer
+```
+
+Don't widen this allowlist casually. If a new route is reachable without a bearer, it must (a) be unambiguously browser-initiated, (b) handle all of its own security (CSRF state, signed cookies, etc.), and (c) be listed here. If it doesn't, it belongs below the gate.
 
 ## Adding a route
 

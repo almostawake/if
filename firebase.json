@@ -15,7 +15,11 @@
     "public": "client/build",
     "predeploy": ["npm run build:all"],
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+    "rewrites": [
+      { "source": "/consent", "function": { "functionId": "api" } },
+      { "source": "/oauth/**", "function": { "functionId": "api" } },
+      { "source": "**", "destination": "/index.html" }
+    ]
   },
   "storage": {
     "rules": "storage.rules"
