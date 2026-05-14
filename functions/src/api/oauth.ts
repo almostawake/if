@@ -6,7 +6,7 @@ import { Router, type Request, type Response } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { getFirestore } from 'firebase-admin/firestore';
 import { createHmac, randomBytes } from 'node:crypto';
-import type { Grant } from '../types/Grant';
+import { grantSchema } from '../common/Grant';
 
 const router = Router();
 
@@ -123,7 +123,7 @@ router.get('/oauth/callback', async (req: Request, res: Response) => {
     return;
   }
 
-  const grant: Grant = {
+  const grant = grantSchema.parse({
     email,
     provider: 'google',
     refreshToken: tokens.refresh_token ?? null,
@@ -131,7 +131,7 @@ router.get('/oauth/callback', async (req: Request, res: Response) => {
     expiresAt: tokens.expiry_date ?? 0,
     scopes: consentScopes(),
     grantedAt: Date.now(),
-  };
+  });
   await db.doc(`grants/${email}`).set(grant, { merge: true });
 
   res.status(200).type('html').send(

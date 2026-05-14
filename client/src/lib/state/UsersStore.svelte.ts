@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import type { User as FbUser } from 'firebase/auth';
 import { getFirebase } from '$lib/firebase/init';
-import type { User } from '$types/User';
+import { userSchema, type User } from '$common/User';
 
 class UsersStore {
   users = $state<User[]>([]);
@@ -24,7 +24,7 @@ class UsersStore {
     this.unsub = onSnapshot(
       q,
       (snap) => {
-        this.users = snap.docs.map((d) => d.data() as User);
+        this.users = snap.docs.map((d) => userSchema.parse(d.data()));
         this.loaded = true;
       },
       (err) => {
@@ -43,12 +43,12 @@ class UsersStore {
     const e = email.trim().toLowerCase();
     if (!e) throw new Error('Email is required');
     const { db } = getFirebase();
-    await setDoc(doc(db, 'users', e), {
+    await setDoc(doc(db, 'users', e), userSchema.parse({
       email: e,
       admin: true,
       addedAt: Date.now(),
       addedBy
-    } satisfies User);
+    } satisfies User));
   };
 
   remove = async (email: string) => {

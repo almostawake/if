@@ -10,6 +10,12 @@
 //
 // Pure Node — no `jq`, no `curl`. Uses the emulator's admin-bypass
 // header (`Authorization: Bearer owner`) to skip security rules.
+//
+// Schema kept in sync by hand with `functions/src/common/User.ts` (the
+// canonical zod schema). This script can't import that file directly —
+// it's a standalone .mjs invoked before any TS build — so the field
+// shape below is a deliberate duplicate. If you change User.ts, mirror
+// the change here (and in aa/n's _seed_users provisioning step).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

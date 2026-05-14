@@ -11,12 +11,13 @@ export default {
       precompress: false,
       strict: true
     }),
-    // `$types` resolves to functions/src/types — the single home for
-    // Firestore-backed types (see ../docs/CLAUDE-STACK.md). Files there
-    // must stay browser-safe (pure types or zod schemas, no
+    // `$common` resolves to functions/src/common — the single home for
+    // browser-safe code shared between client and functions: zod schemas
+    // for Firestore-backed types, plus their inferred TS types (see
+    // ../docs/CLAUDE-STACK.md). Files there must stay browser-safe (no
     // firebase-admin / Node-only imports) so this client bundle works.
     alias: {
-      $types: '../functions/src/types'
+      $common: '../functions/src/common'
     }
   }
 };

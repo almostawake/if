@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * @collection grants/{email}
  *
@@ -16,12 +18,14 @@
  * writes it. Refresh tokens are credentials and must never leave the
  * server.
  */
-export interface Grant {
-  email: string;
-  provider: 'google';
-  refreshToken: string | null;
-  accessToken: string;
-  expiresAt: number;
-  scopes: string[];
-  grantedAt: number;
-}
+export const grantSchema = z.object({
+  email: z.email(),
+  provider: z.literal('google'),
+  refreshToken: z.string().nullable(),
+  accessToken: z.string(),
+  expiresAt: z.number(),
+  scopes: z.array(z.string()),
+  grantedAt: z.number(),
+});
+
+export type Grant = z.infer<typeof grantSchema>;

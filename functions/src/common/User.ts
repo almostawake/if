@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * @collection users/{email}
  *
@@ -17,11 +19,13 @@
  * field exists for explicit visibility in the Firestore console and
  * to future-proof for non-admin user records later.
  */
-export interface User {
-  email: string;
-  admin: boolean;
-  addedAt: number;
-  addedBy: string;
-  uid?: string;
-  lastSignInAt?: number;
-}
+export const userSchema = z.object({
+  email: z.email(),
+  admin: z.boolean(),
+  addedAt: z.number(),
+  addedBy: z.string(),
+  uid: z.string().optional(),
+  lastSignInAt: z.number().optional(),
+});
+
+export type User = z.infer<typeof userSchema>;

@@ -46,7 +46,7 @@ Don't override per-function unless there's a real reason — keeping everything 
 
 This repo is a **template**, not an app. It ships with the bare minimum: auth, an empty home page, and the capability layer below. New features land in their own routes (`src/routes/<feature>/`) and their own `functions/src/<feature>/` folder.
 
-The capability layer — `src/lib/services/`, `src/lib/state/`, `src/lib/types/`, `src/lib/utils/`, and `functions/src/` — is what gets extended, not replaced. Keep new code consistent with the patterns already there.
+The capability layer — `src/lib/services/`, `src/lib/state/`, `src/lib/utils/`, `functions/src/common/` (shared zod schemas + types), and `functions/src/` — is what gets extended, not replaced. Keep new code consistent with the patterns already there.
 
 ---
 
@@ -65,10 +65,10 @@ The capability layer — `src/lib/services/`, `src/lib/state/`, `src/lib/types/`
 | `src/routes/` | URL → page composition, layouts | `$lib/components`, `$lib/state` |
 | `src/lib/components/` | Presentational + interactive UI | `$lib/state`, `$lib/components/ui` |
 | `src/lib/components/ui/` | shadcn-svelte primitives (owned, editable) | Tailwind, bits-ui |
-| `src/lib/state/` | Rune stores + domain actions | `$lib/services`, `$types` |
-| `src/lib/services/` | Firestore I/O, stateless, `uid`-first | `$types`, firebase SDK |
-| `$types/*` (= `functions/src/types/`) | Pure TS types + zod schemas with `@collection` JSDoc tags. **Single home, shared client ↔ functions** — must stay browser-safe (no `firebase-admin` / Node-only imports). | nothing |
-| `src/lib/utils/` | Pure helpers (parsers, id gen, formatters) | `$types` |
+| `src/lib/state/` | Rune stores + domain actions | `$lib/services`, `$common` |
+| `src/lib/services/` | Firestore I/O, stateless, `uid`-first | `$common`, firebase SDK |
+| `$common/*` (= `functions/src/common/`) | zod schemas + their `z.infer` types for Firestore-backed docs, tagged with `@collection`. **Single home, shared client ↔ functions** — must stay browser-safe (no `firebase-admin` / Node-only imports). | `zod` |
+| `src/lib/utils/` | Pure helpers (parsers, id gen, formatters) | `$common` |
 
 **Hard rules:**
 - Components **never** import from `services/` directly — they go through `state/`.
@@ -96,7 +96,7 @@ client/
 │   │   ├── services/                ← Firestore I/O
 │   │   │   └── firebase.ts          ← init singleton + getFirebaseServices()
 │   │   └── utils/
-│   │   (types live in functions/src/types/, imported as `$types/*`)
+│   │   (zod schemas + types live in functions/src/common/, imported as `$common/*`)
 │   ├── app.html
 │   ├── app.css                      ← Tailwind entry
 │   └── app.d.ts
@@ -117,7 +117,7 @@ One file per domain, exported as a singleton. State + actions + derived values c
 ```ts
 // src/lib/state/CategoriesStore.svelte.ts
 import * as CategoryService from '$lib/services/CategoryService'
-import type { Category, CategoryGroup } from '$types/Category'
+import type { Category, CategoryGroup } from '$common/Category'
 import { generateId } from '$lib/utils/generateId'
 
 class CategoriesStore {
@@ -167,7 +167,7 @@ Stateless function modules. `uid` is always the first argument. Firestore batch 
 // src/lib/services/CategoryService.ts
 import { collection, doc, writeBatch } from 'firebase/firestore'
 import { getFirebaseServices } from './firebase'
-import type { Category } from '$types/Category'
+import type { Category } from '$common/Category'
 
 export async function createCategory(uid: string, cat: Category): Promise<void> {
   const { db } = await getFirebaseServices()

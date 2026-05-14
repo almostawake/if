@@ -47,6 +47,8 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 `cmd-auth.mjs --token` probes / refreshes / re-grants as needed (logs to stderr) and prints the access_token to stdout. Non-zero exit on failure so callers can error-check.
 
+**When listing projects**, filter out projects pending deletion (`lifecycleState != "ACTIVE"`) and Apps Script-managed projects (project IDs prefixed with `sys-`, or `parent.type == "firebaseAppScript"`). They clutter results and are never deploy targets. A jq filter like `.projects[] | select(.lifecycleState == "ACTIVE" and (.projectId | startswith("sys-") | not))` is usually enough.
+
 **Hard rules — these are the failure modes that bite LLMs in fresh sessions:**
 - **Never** read `.env.auth.json` directly to pluck out an access_token. The stored token is usually expired; the file is meant to be consumed via `cmd-auth.mjs`.
 - **Never** roll your own refresh — no manual `POST` to `oauth2.googleapis.com/token`, no hand-written exchange of refresh_token for access_token. `cmd-auth.mjs` is the one place that does that, and it writes the refreshed tokens back atomically.
@@ -101,10 +103,11 @@ See **docs/CLAUDE-EMULATORS.md**. Highlights:
 - Don't deploy unless the user explicitly asks.
 
 ## Data model conventions
-- All Firestore-backed types live in **`functions/src/types/`** — single source of truth, shared with the client via the `$types` alias (configured in `client/svelte.config.js`). Files there must stay browser-safe (pure TS types or zod schemas, no `firebase-admin` / Node-only imports).
-- One PascalCase file per type (e.g. `User.ts`). Multiple related types may share a file, each with its own `@collection` tag.
+- All Firestore-backed schemas live in **`functions/src/common/`** — single source of truth, shared with the client via the `$common` alias (configured in `client/svelte.config.js`). Files there must stay browser-safe (zod + pure TS only, no `firebase-admin` / Node-only imports).
+- One PascalCase file per type (e.g. `User.ts`). Each file exports a zod schema and a `z.infer`-derived type — never declare a bare `interface` here. Multiple related types may share a file, each with its own `@collection` tag.
 - Every Firestore-backed type carries a `@collection` JSDoc tag with its full path (e.g. `@collection users/{email}` or `@collection users/{uid}/transactions`). Update the tag when renaming/moving collections.
-- Client imports types as `import type { User } from '$types/User'`.
+- Validate at I/O boundaries: parse incoming Firestore snapshots and outgoing writes with the schema (`userSchema.parse(...)`) so a drifting wire shape fails loudly instead of silently corrupting state.
+- Imports: `import { userSchema, type User } from '$common/User'` (client) or `'../common/User'` (functions, relative).
 
 ## General
 - Stop early on dead ends — if automation hits a blocking dialog or fails 2-3 times, pivot approach or ask. Don't retry the same thing.
