@@ -8,25 +8,18 @@ import {initializeApp, getApps} from "firebase-admin/app";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onRequest} from "firebase-functions/v2/https";
 import oauthRouter from "./api/oauth";
+import {FUNCTIONS_REGION} from "./region";
 
 if (!getApps().length) initializeApp();
 
-// Functions deploy to the same region as the project's Firestore database.
-// cmd-deploy.mjs looks that region up (it's immutable — set at project
-// creation) and injects it as FIREBASE_REGION, so functions always sit with
-// their data and there's no hardcoded region to drift. The emulator has no
-// deploy wrapper, so it keeps the legacy constant. TODO(emulator): give the
-// emulator a real region source in the emulator pass.
-const region =
-  process.env.FIREBASE_REGION ??
-  (process.env.FUNCTIONS_EMULATOR ? "australia-southeast1" : undefined);
-if (!region) {
-  throw new Error(
-    "FIREBASE_REGION not set — deploy via `npm run deploy*`, which looks the " +
-    "region up from the project's Firestore location. See docs/CLAUDE-STACK.md.",
-  );
-}
-setGlobalOptions({region});
+// Functions deploy co-located with the project's Firestore database. That
+// region is immutable (set at project creation) and recorded in root .env as
+// THIS_PROJECT_REGION_ON_GOOGLE_HOSTING; the functions build generates
+// ./region.ts from it (see cmd-region.mjs), so there's no hand-typed copy to
+// drift. It must be baked into source — not read from an env var — because
+// firebase-tools runs functions discovery in a subprocess with a fixed,
+// minimal env that user values never reach.
+setGlobalOptions({region: FUNCTIONS_REGION});
 
 const app = express();
 app.use(express.json());

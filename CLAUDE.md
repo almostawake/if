@@ -69,7 +69,7 @@ The wrapper (`cmd-deploy.mjs`) reads the OAuth refresh token from `.env.auth*.js
 
 **Multi-account deploy:** `ACCOUNT_EMAIL=alice@x.com npm run deploy:functions` picks up `.env.auth.alice@x.com.json`.
 
-**`.env`** carries `THIS_PROJECT_ID_ON_GOOGLE_HOSTING` (gitignored, 1:1 with checkout — no dev/test/prod split for this template's audience). If missing, write it manually.
+**`.env`** carries `THIS_PROJECT_ID_ON_GOOGLE_HOSTING` and `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING` (gitignored, 1:1 with checkout — no dev/test/prod split for this template's audience). If missing, write them manually. The region is the immutable Firestore location; the functions build bakes it into `functions/src/region.ts` (see CLAUDE-STACK.md → Region).
 
 Do NOT deploy unless the user explicitly asks.
 

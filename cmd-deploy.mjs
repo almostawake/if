@@ -86,38 +86,10 @@ fs.writeFileSync(
   { mode: 0o600 }
 );
 
-// Functions deploy to the same region as the project's Firestore database.
-// That region is immutable (chosen at project creation) and authoritative,
-// so we look it up rather than keep a copy that could drift, and inject it
-// as FIREBASE_REGION for functions/src/index.ts's setGlobalOptions.
-async function firestoreRegion() {
-  const tokenArgs = account ? [account, '--token'] : ['--token'];
-  const tok = spawnSync('node', ['cmd-auth.mjs', ...tokenArgs], {
-    encoding: 'utf8',
-    stdio: ['inherit', 'pipe', 'inherit'],
-  });
-  if (tok.status !== 0) {
-    console.error('error: cmd-auth.mjs failed — cannot look up the Firestore region');
-    process.exit(2);
-  }
-  const res = await fetch(
-    `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)`,
-    { headers: { Authorization: `Bearer ${tok.stdout.trim()}` } },
-  );
-  if (!res.ok) {
-    console.error(
-      `error: could not read the Firestore region for ${project} (HTTP ${res.status}) — is it provisioned?`,
-    );
-    process.exit(2);
-  }
-  const { locationId } = await res.json();
-  if (!locationId) {
-    console.error(`error: Firestore database for ${project} reports no locationId`);
-    process.exit(2);
-  }
-  return locationId;
-}
-const region = await firestoreRegion();
+// The functions' deploy region is handled entirely by the functions build —
+// it generates functions/src/region.ts from .env (see cmd-region.mjs), and
+// firebase.json's predeploy runs that build. This wrapper deliberately knows
+// nothing about region; don't re-add region logic here.
 
 // --force: auto-creates the gcf-artifacts cleanup policy (1d default)
 // so the post-deploy "no cleanup policy detected" error doesn't fail
@@ -126,7 +98,7 @@ const region = await firestoreRegion();
 // aren't useful for this template's solo-dev flow.
 const passthrough = process.argv.slice(2);
 const args = ['firebase', 'deploy', '--project', project, '--force', ...passthrough];
-console.log(`deploy: project=${project} region=${region} auth=${authFile} → npx ${args.join(' ')}`);
+console.log(`deploy: project=${project} auth=${authFile} → npx ${args.join(' ')}`);
 
 let exitCode = 0;
 try {
@@ -136,7 +108,6 @@ try {
       ...process.env,
       GOOGLE_APPLICATION_CREDENTIALS: adcPath,
       GOOGLE_CLOUD_QUOTA_PROJECT: project,
-      FIREBASE_REGION: region,
     },
   });
   exitCode = result.status ?? 1;

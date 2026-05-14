@@ -36,7 +36,7 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 Every Firebase resource for a project lives in **one region**, chosen once when the project is created:
 
 - **Firestore** and the **default Storage bucket** — provisioned by the new-project script (`../aa/n`). Default `australia-southeast1` (Sydney); override at creation with `n --region <id>` (single regions only — Functions can't live in a multi-region like `nam5`). **Immutable** once set.
-- **Cloud Functions** (and the Cloud Run services + Artifact Registry repos they spawn) — deploy to that same region automatically: `cmd-deploy.mjs` looks up the Firestore region and injects it as `FIREBASE_REGION`, which `setGlobalOptions` reads in `functions/src/index.ts`. No hardcoded region, nothing to keep in sync.
+- **Cloud Functions** (and the Cloud Run services + Artifact Registry repos they spawn) — deploy to that same region automatically. `n` records the region in `.env` as `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`; the functions build generates `functions/src/region.ts` from it (`cmd-region.mjs`), and `setGlobalOptions` reads it in `functions/src/index.ts`. It's baked into source rather than passed as an env var because firebase-tools runs functions discovery in a subprocess with a fixed, minimal env that user values never reach. `region.ts` is gitignored and regenerated on every build.
 
 Functions always sit with their data — no cross-region latency or egress. Don't override per-function; if you genuinely need a function elsewhere, set `region` on that specific `onRequest` / `onCall`, not on `setGlobalOptions`.
 

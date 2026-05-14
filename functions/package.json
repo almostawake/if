@@ -6,8 +6,8 @@
     "node": "22"
   },
   "scripts": {
-    "build": "tsc",
-    "build:watch": "tsc -w"
+    "build": "node ../cmd-region.mjs && tsc",
+    "build:watch": "node ../cmd-region.mjs && tsc -w"
   },
   "dependencies": {
     "express": "^4.21.0",

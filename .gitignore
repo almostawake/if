@@ -5,6 +5,9 @@ client/.svelte-kit/
 client/static/*.json
 functions/node_modules/
 functions/lib/
+# Generated per-build from .env by cmd-region.mjs — bakes the deploy region
+# into source for functions discovery. Regenerated every build, never committed.
+functions/src/region.ts
 
 # Firebase
 firebase-debug.log
