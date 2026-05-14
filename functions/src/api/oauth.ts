@@ -81,13 +81,30 @@ function placeholderPage(): string {
 <div>consents will need some more setup to work.</div>`;
 }
 
+// Always reply HTML, never plain text. iOS Safari treats a text/plain
+// response from /oauth/callback as a downloadable attachment ("callback.txt")
+// instead of rendering it — surprises the user, hides the message. Same
+// system-ui frame as the success page so error pages don't feel orphaned.
+function htmlEscape(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!
+  ));
+}
+
+function messagePage(title: string, body: string): string {
+  return `<!doctype html><meta charset=utf-8><title>${htmlEscape(title)}</title>
+<style>body{font-family:system-ui;max-width:480px;margin:4rem auto;padding:0 1rem;line-height:1.5}</style>
+<h1>${htmlEscape(title)}</h1>
+<p>${body}</p>`;
+}
+
 router.get('/consent', (_req: Request, res: Response) => {
   if (!process.env.GOOGLE_HOSTING_CONSENT_ID || !process.env.GOOGLE_HOSTING_CONSENT_KEY) {
     res.status(200).type('html').send(placeholderPage());
     return;
   }
   const err = configError();
-  if (err) { res.status(500).type('text').send(`Config error: ${err}`); return; }
+  if (err) { res.status(500).type('html').send(messagePage('Config error', htmlEscape(err))); return; }
 
   const url = client().generateAuthUrl({
     access_type: 'offline',
@@ -100,26 +117,27 @@ router.get('/consent', (_req: Request, res: Response) => {
 
 router.get('/oauth/callback', async (req: Request, res: Response) => {
   const err = configError();
-  if (err) { res.status(500).type('text').send(`Config error: ${err}`); return; }
+  if (err) { res.status(500).type('html').send(messagePage('Config error', htmlEscape(err))); return; }
 
   const code = String(req.query.code ?? '');
   const state = String(req.query.state ?? '');
-  if (!code) { res.status(400).type('text').send('Missing code'); return; }
-  if (!verifyState(state)) { res.status(400).type('text').send('Invalid or expired state'); return; }
+  if (!code) { res.status(400).type('html').send(messagePage('Missing code', 'No <code>code</code> parameter on the callback URL.')); return; }
+  if (!verifyState(state)) { res.status(400).type('html').send(messagePage('Invalid or expired state', 'The consent link is too old or was tampered with — start over from <a href="/consent">/consent</a>.')); return; }
 
   const { tokens } = await client().getToken(code);
-  if (!tokens.id_token) { res.status(400).type('text').send('No id_token returned'); return; }
+  if (!tokens.id_token) { res.status(400).type('html').send(messagePage('Sign-in incomplete', 'Google did not return an id_token. Try again from <a href="/consent">/consent</a>.')); return; }
 
   const idPayload = JSON.parse(Buffer.from(tokens.id_token.split('.')[1], 'base64url').toString());
   const email = String(idPayload.email ?? '').toLowerCase();
-  if (!email) { res.status(400).type('text').send('No email in id_token'); return; }
+  if (!email) { res.status(400).type('html').send(messagePage('Sign-in incomplete', 'No email was attached to your Google identity token. Try again from <a href="/consent">/consent</a>.')); return; }
 
   const db = getFirestore();
   const userDoc = await db.doc(`users/${email}`).get();
   if (!userDoc.exists) {
-    res.status(403).type('text').send(
-      `Access not granted: ${email} is not on the user whitelist. Ask the project owner to add you first.`,
-    );
+    res.status(403).type('html').send(messagePage(
+      'Access not granted',
+      `<strong>${htmlEscape(email)}</strong> is not on the user whitelist. Ask the project owner to add you first.`,
+    ));
     return;
   }
 
