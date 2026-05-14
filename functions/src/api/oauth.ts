@@ -73,11 +73,16 @@ function client(): OAuth2Client {
 
 // Friendly placeholder mirroring /'s "ah, one day a home page here." — shown
 // when the template's been cloned but the OAuth client deets aren't filled in
-// yet. Same centred-faint-text vibe; minimal inline CSS since the function
-// isn't bundled with the SvelteKit Tailwind build.
+// yet. Styling is hand-copied from the SvelteKit side (app.css @theme +
+// app.html font link) because this function isn't part of the Tailwind build:
+// JetBrains Mono 18px/1.45, #999 faint text on white, centred in the viewport
+// with the same px-6 gutter. Keep in sync with client/src/routes/+page.svelte.
 function placeholderPage(): string {
   return `<!doctype html><meta charset=utf-8><title>consent</title>
-<style>html,body{margin:0;padding:0;height:100%}body{display:flex;align-items:center;justify-content:center;padding:0 1.5rem;font:14px/1.5 system-ui,-apple-system,sans-serif;color:#9ca3af}</style>
+<link rel=preconnect href="https://fonts.googleapis.com">
+<link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
+<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>html,body{margin:0;padding:0}body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:0 1.5rem;font-family:'JetBrains Mono','Fira Code','SF Mono','Cascadia Code','Consolas',monospace;font-size:18px;line-height:1.45;background:#fff;color:#999}</style>
 <div>consents will need some more setup to work.</div>`;
 }
 
