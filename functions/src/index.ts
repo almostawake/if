@@ -11,9 +11,22 @@ import oauthRouter from "./api/oauth";
 
 if (!getApps().length) initializeApp();
 
-// Pin every function in this codebase to Sydney. Matches the Firestore + Storage region
-// set up by the new-project provisioner. Override per-function only if there's a reason.
-setGlobalOptions({region: "australia-southeast1"});
+// Functions deploy to the same region as the project's Firestore database.
+// cmd-deploy.mjs looks that region up (it's immutable — set at project
+// creation) and injects it as FIREBASE_REGION, so functions always sit with
+// their data and there's no hardcoded region to drift. The emulator has no
+// deploy wrapper, so it keeps the legacy constant. TODO(emulator): give the
+// emulator a real region source in the emulator pass.
+const region =
+  process.env.FIREBASE_REGION ??
+  (process.env.FUNCTIONS_EMULATOR ? "australia-southeast1" : undefined);
+if (!region) {
+  throw new Error(
+    "FIREBASE_REGION not set — deploy via `npm run deploy*`, which looks the " +
+    "region up from the project's Firestore location. See docs/CLAUDE-STACK.md.",
+  );
+}
+setGlobalOptions({region});
 
 const app = express();
 app.use(express.json());

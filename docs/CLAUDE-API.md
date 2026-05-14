@@ -80,12 +80,14 @@ The same secret is used by the emulator — calls in local dev need the bearer t
 
 ## Region
 
-All functions in this codebase default to `australia-southeast1` (Sydney) via `setGlobalOptions` at the top of `functions/src/index.ts`. This matches the Firestore + Storage region the new-project script provisions. Don't override per-function unless there's a real reason — keeping everything in one region avoids cross-region latency and egress.
+Functions deploy to whatever region the project's Firestore database lives in. That region is **immutable** — chosen once at project creation by the new-project script (`../aa/n`; default `australia-southeast1`, override with `n --region <id>`). `cmd-deploy.mjs` looks it up and injects it as `FIREBASE_REGION`, which `setGlobalOptions` reads at the top of `functions/src/index.ts`. No hardcoded region to drift, and functions always sit with their data. Don't override per-function — keeping everything in one region avoids cross-region latency and egress.
 
 ## Where it's reachable
 
-- **Local emulator:** `http://localhost:5001/{project-id}/australia-southeast1/api/...`
-- **Deployed (default):** `https://australia-southeast1-{project}.cloudfunctions.net/api/...`
+- **Local emulator:** `http://localhost:5001/{project-id}/{region}/api/...`
+- **Deployed:** `https://{region}-{project}.cloudfunctions.net/api/...` — `{region}` is the project's Firestore region (see above)
+
+The public OAuth routes (`/consent`, `/oauth/callback`) are reached instead via the Hosting domain — `https://{project}.web.app/...` — through the rewrites in `firebase.json`.
 
 To put it at `https://yourdomain/api/...`, add a hosting rewrite in `firebase.json` **above** the SPA catch-all:
 

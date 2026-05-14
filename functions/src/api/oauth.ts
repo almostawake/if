@@ -14,14 +14,22 @@ const router = Router();
 // exactly. If you change these, update the OAuth client in Cloud Console →
 // Google Auth Platform → Clients (both URIs sit on one client).
 //
+// Prod: the callback runs behind the Hosting rewrite (firebase.json routes
+// /oauth/** to this function), so the public URL is the Hosting domain —
+// https://<project>.web.app — derived from GCLOUD_PROJECT, which the runtime
+// always sets. Deliberately NOT the client's authDomain
+// (<project>.firebaseapp.com): that alias is used only by the Firebase Auth
+// SDK. Both serve the same site — don't "unify" them.
+//
 // Dev URI is hardcoded against `demo-not-required` because that's the project
 // id the emulator runs under (npm run start:emulators uses --project
 // demo-not-required as a deliberate constraint — see docs/CLAUDE-EMULATORS.md).
-// Same pattern as every other local-vs-prod fork in this codebase.
+// TODO(emulator): the dev URI's region is still hardcoded — fold into the
+// emulator region pass.
 function redirectUri(): string {
   return process.env.FUNCTIONS_EMULATOR
     ? 'http://localhost:5001/demo-not-required/australia-southeast1/api/oauth/callback'
-    : `https://australia-southeast1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/api/oauth/callback`;
+    : `https://${process.env.GCLOUD_PROJECT}.web.app/oauth/callback`;
 }
 
 const ID_SCOPES = ['openid', 'email'];

@@ -18,7 +18,7 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | Components | **shadcn-svelte** + **bits-ui** | Components are *copied into the repo*, not a dependency. LLMs can grep and read the exact API instead of hallucinating props. |
 | Icons | **lucide-svelte** | De-facto standard, huge set, tree-shakes. |
 | State | **Class-based rune stores** | One class per domain, `$state` + methods + `$derived` co-located. See "State pattern" below. |
-| Backend | **Firebase** — Auth, Firestore, Functions, Storage | Same as reference app. All resources in `australia-southeast1` (Sydney) — see "Region" below. |
+| Backend | **Firebase** — Auth, Firestore, Functions, Storage | Same as reference app. All resources in one region, chosen at project creation — see "Region" below. |
 | Auth (default) | **Firebase Auth — Email Link sign-in** + `users` whitelist in Firestore (doc id = lowercased email) | Gates `/admin/*` only. End users at `/` are anonymous (no sign-in). Zero passwords, no OAuth consent screen, signed-in users self-administer from `/admin`. See ../CLAUDE.md "Auth & deploy → flow 1" for details. |
 | Validation | **Zod** | Used at every I/O boundary: form → Firestore, LLM response → typed object, scraped fields → typed object. |
 | LLM | **Gemini API** (via a Cloud Function that holds the key) | Single LLM SDK across the stack. Key lives server-side. Costs are real — no free tier to hide behind. |
@@ -33,12 +33,12 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 
 ## Region
 
-All Firebase resources default to **`australia-southeast1`** (Sydney):
+Every Firebase resource for a project lives in **one region**, chosen once when the project is created:
 
-- **Firestore** and **default Storage bucket** — provisioned to Sydney by the new-project script (`../aa/n`).
-- **Cloud Functions** (and the Cloud Run services + Artifact Registry repos they spawn) — pinned via `setGlobalOptions({region: "australia-southeast1"})` at the top of `functions/src/index.ts`. Every function in this codebase inherits.
+- **Firestore** and the **default Storage bucket** — provisioned by the new-project script (`../aa/n`). Default `australia-southeast1` (Sydney); override at creation with `n --region <id>` (single regions only — Functions can't live in a multi-region like `nam5`). **Immutable** once set.
+- **Cloud Functions** (and the Cloud Run services + Artifact Registry repos they spawn) — deploy to that same region automatically: `cmd-deploy.mjs` looks up the Firestore region and injects it as `FIREBASE_REGION`, which `setGlobalOptions` reads in `functions/src/index.ts`. No hardcoded region, nothing to keep in sync.
 
-Don't override per-function unless there's a real reason — keeping everything in one region avoids cross-region latency and egress costs. If you ever need a function elsewhere, set `region` on that specific `onRequest` / `onCall` / etc., not by editing `setGlobalOptions`.
+Functions always sit with their data — no cross-region latency or egress. Don't override per-function; if you genuinely need a function elsewhere, set `region` on that specific `onRequest` / `onCall`, not on `setGlobalOptions`.
 
 ---
 
