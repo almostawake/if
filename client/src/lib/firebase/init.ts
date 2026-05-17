@@ -15,7 +15,7 @@ import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase
 // namespace and admin reads 403 against an empty `users` collection.
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? 'demo-key',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? 'demo-not-required.firebaseapp.com',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? 'demo-not-required.web.app',
   projectId: import.meta.env.DEV
     ? 'demo-not-required'
     : (import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'demo-not-required'),

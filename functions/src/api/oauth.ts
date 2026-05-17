@@ -17,9 +17,8 @@ const router = Router();
 // Prod: the callback runs behind the Hosting rewrite (firebase.json routes
 // /oauth/** to this function), so the public URL is the Hosting domain —
 // https://<project>.web.app — derived from GCLOUD_PROJECT, which the runtime
-// always sets. Deliberately NOT the client's authDomain
-// (<project>.firebaseapp.com): that alias is used only by the Firebase Auth
-// SDK. Both serve the same site — don't "unify" them.
+// always sets. Same origin as the Firebase Auth SDK's authDomain (also
+// <project>.web.app) so cookies stay first-party in Chrome.
 //
 // Dev URI is hardcoded against `demo-not-required` because that's the project
 // id the emulator runs under (npm run start:emulators uses --project
