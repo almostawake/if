@@ -39,13 +39,8 @@ async function main() {
   const email = readOwnerEmail();
   if (!email) return; // already logged the reason
 
-  const present = await isSeeded(email);
-  if (present) {
-    log(`${email} already on users`);
-    return;
-  }
-  await seed(email);
-  log(`seeded ${email} on users`);
+  const created = await upsertSeed(email);
+  log(created ? `seeded ${email} on users` : `re-asserted admin on ${email}`);
 }
 
 function readOwnerEmail() {
@@ -80,17 +75,14 @@ async function waitForFirestore() {
   throw new Error(`Firestore emulator never came up at ${FIRESTORE}`);
 }
 
-async function isSeeded(email) {
-  const url = `${FIRESTORE}/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${encodeURIComponent(email)}`;
-  const res = await fetch(url, { headers: { Authorization: 'Bearer owner' } });
-  if (res.status === 200) return true;
-  if (res.status === 404) return false;
-  throw new Error(`probe returned unexpected status ${res.status}`);
-}
-
-async function seed(email) {
-  const url = `${FIRESTORE}/v1/projects/${PROJECT_ID}/databases/(default)/documents/users?documentId=${encodeURIComponent(email)}`;
-  const body = {
+// Upsert semantics: POST first (creates with addedAt=now); on 409 fall
+// back to a PATCH with updateMask=admin so a re-seed re-asserts
+// admin=true without trampling uid / lastSignInAt / the original
+// addedAt that get written after first sign-in. Returns true if newly
+// created, false if an existing row was re-asserted.
+async function upsertSeed(email) {
+  const createUrl = `${FIRESTORE}/v1/projects/${PROJECT_ID}/databases/(default)/documents/users?documentId=${encodeURIComponent(email)}`;
+  const createBody = {
     fields: {
       email: { stringValue: email },
       admin: { booleanValue: true },
@@ -98,17 +90,26 @@ async function seed(email) {
       addedBy: { stringValue: 'bootstrap' },
     },
   };
-  const res = await fetch(url, {
+  const createRes = await fetch(createUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer owner',
-    },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer owner' },
+    body: JSON.stringify(createBody),
   });
-  if (!res.ok) {
-    throw new Error(`seed write failed: ${res.status} ${await res.text()}`);
+  if (createRes.ok) return true;
+  if (createRes.status !== 409) {
+    throw new Error(`seed write failed: ${createRes.status} ${await createRes.text()}`);
   }
+
+  const patchUrl = `${FIRESTORE}/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${encodeURIComponent(email)}?updateMask.fieldPaths=admin`;
+  const patchRes = await fetch(patchUrl, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer owner' },
+    body: JSON.stringify({ fields: { admin: { booleanValue: true } } }),
+  });
+  if (!patchRes.ok) {
+    throw new Error(`seed re-assert failed: ${patchRes.status} ${await patchRes.text()}`);
+  }
+  return false;
 }
 
 function log(msg) {
