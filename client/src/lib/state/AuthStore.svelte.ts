@@ -3,16 +3,19 @@ import { doc, getDoc } from 'firebase/firestore';
 import { AuthService } from '$lib/services/AuthService';
 import { getFirebase } from '$lib/firebase/init';
 
+// Singleton — constructor subscribes to onAuthStateChanged once, for the
+// rest of the page session. Importing this module is what causes
+// Firebase to initialize, so it's deliberately NOT imported from the
+// root layout: the public `/` route stays Firebase-free. Only routes
+// that actually need auth (/admin, /login) import it.
 class AuthStore {
   user = $state<User | null>(null);
   /** null = not yet known, true/false = result of the user-whitelist check. */
   isAdmin = $state<boolean | null>(null);
   loaded = $state(false);
-  private unsub: (() => void) | null = null;
 
-  start = () => {
-    if (this.unsub) return;
-    this.unsub = AuthService.observe(async (u) => {
+  constructor() {
+    AuthService.observe(async (u) => {
       this.user = u;
       if (!u || !u.email) {
         this.isAdmin = null;
@@ -21,12 +24,7 @@ class AuthStore {
       }
       this.loaded = true;
     });
-  };
-
-  stop = () => {
-    this.unsub?.();
-    this.unsub = null;
-  };
+  }
 
   signOut = async () => {
     await AuthService.signOut();
