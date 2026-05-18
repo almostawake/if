@@ -116,8 +116,18 @@ async function refresh(cred) {
   const text = await res.text();
   if (!res.ok) {
     if (res.status === 400 && /invalid_grant/.test(text)) {
-      const err = new Error('refresh_token revoked (invalid_grant)');
+      // Distinguish Workspace session-control reauth (invalid_rapt /
+      // rapt_required) from a real refresh_token revocation. Both
+      // demand a fresh grant (RAPT can't be satisfied from code), but
+      // the cause is different and the cure is different — RAPT is
+      // fixed at the Workspace admin level, not by re-signing in.
+      let subtype = '';
+      try { subtype = JSON.parse(text).error_subtype || ''; } catch { /* not JSON */ }
+      const err = new Error(/rapt/.test(subtype)
+        ? `Workspace session expired (${subtype})`
+        : 'refresh_token revoked (invalid_grant)');
       err.code = 'INVALID_GRANT';
+      err.subtype = subtype;
       throw err;
     }
     throw new Error(`refresh failed (${res.status}): ${text.slice(0, 300)}`);
@@ -293,7 +303,12 @@ export async function ensureValidToken({ force = false, account } = {}) {
         return newTokens.access_token;
       } catch (e) {
         if (e.code !== 'INVALID_GRANT') throw e;
-        console.error('⋯  refresh_token revoked, starting fresh sign-in…');
+        if (/rapt/.test(e.subtype || '')) {
+          console.error(`⋯  Workspace session expired (${e.subtype}) — fresh sign-in required.`);
+          console.error('   to stop daily prompts: admin.google.com → Security → Google Cloud session control');
+        } else {
+          console.error('⋯  refresh_token revoked — starting fresh sign-in…');
+        }
       }
     }
   }

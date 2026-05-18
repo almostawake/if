@@ -57,6 +57,8 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 **Multi-account:** pass the email as a positional arg — `node cmd-auth.mjs alice@x.com --token` — picks up `.env.auth.alice@x.com.json`. Add a new account with `npm run auth -- alice@x.com`. Probe-only check: `npm run auth:status` (or `node cmd-auth.mjs alice@x.com --status`).
 
+**Daily re-consent prompts** on a Workspace account aren't a refresh-token revocation — they're Google Cloud session control (the `cloud-platform` scope is governed by it). Refresh returns `invalid_grant` with `error_subtype: invalid_rapt`; `cmd-auth.mjs` labels the case so you can tell which is which. There's no in-code fix (RAPT can't be satisfied without a fresh user grant from a first-party tool). Permanent cure: admin.google.com → Security → Access and data control → Google Cloud session control → set "Session never expires" (or extend) on your account/OU.
+
 ### 3. Deploy — `npm run deploy*` (the wrapper handles the auth shim itself)
 
 Deploys go through `npm run deploy:<target>` — names are self-explanatory (`deploy`, `deploy:hosting`, `deploy:functions`, `deploy:rules`, `deploy:indexes`).
