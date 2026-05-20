@@ -82,6 +82,13 @@ fs.writeFileSync(
     client_id: auth.client_id,
     client_secret: auth.client_secret,
     refresh_token: auth.tokens.refresh_token,
+    // Without this, firebase.googleapis.com 400s for ADC user creds —
+    // billing/usage gets booked against the authenticating user's
+    // home project rather than this project. The env var
+    // GOOGLE_CLOUD_QUOTA_PROJECT works for direct google-auth calls
+    // but firebase-tools doesn't propagate it consistently into its
+    // subprocesses; baking it into the cred file is the reliable fix.
+    quota_project_id: project,
   }),
   { mode: 0o600 }
 );
@@ -100,12 +107,23 @@ const passthrough = process.argv.slice(2);
 const args = ['firebase', 'deploy', '--project', project, '--force', ...passthrough];
 console.log(`deploy: project=${project} auth=${authFile} → npx ${args.join(' ')}`);
 
+// firebase-tools persists its own signed-in user in
+// $XDG_CONFIG_HOME/configstore/firebase-tools.json (via the `configstore`
+// pkg). If the user has ever run `firebase login` for any reason, that
+// account takes priority over GOOGLE_APPLICATION_CREDENTIALS — even when the
+// stored account has no rights on THIS project. We give firebase-tools an
+// empty XDG_CONFIG_HOME for this run so it falls back to ADC. The user's
+// global firebase-tools state is untouched. (macOS/Linux only — firebase-
+// tools' configstore uses a different path on Windows.)
+const sandboxConfigHome = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'firebase-deploy-'));
+
 let exitCode = 0;
 try {
   const result = spawnSync('npx', args, {
     stdio: 'inherit',
     env: {
       ...process.env,
+      XDG_CONFIG_HOME: sandboxConfigHome,
       GOOGLE_APPLICATION_CREDENTIALS: adcPath,
       GOOGLE_CLOUD_QUOTA_PROJECT: project,
     },
@@ -113,5 +131,6 @@ try {
   exitCode = result.status ?? 1;
 } finally {
   try { fs.unlinkSync(adcPath); } catch { /* already gone */ }
+  try { fs.rmSync(sandboxConfigHome, { recursive: true, force: true }); } catch { /* already gone */ }
 }
 process.exit(exitCode);
