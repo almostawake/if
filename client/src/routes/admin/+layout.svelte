@@ -87,7 +87,7 @@
                 onclick={closeMenu}
                 class="block px-3 py-2 hover:bg-bg-hover"
               >
-                manage users
+                users
               </a>
             </li>
             <li class="border-t border-border">
