@@ -68,7 +68,7 @@ Still one deploy unit, one Cloud Run service, one cold-start. **Never** add a se
 
 ## What does NOT live here
 
-- **Callables** (`onCall`) — typed RPC for the app's own signed-in client. Authenticated by Firebase Auth ID token, not by the bearer. One callable per operation, organised by feature folder under `functions/src/`.
+- **Callables** (`onCall`) — typed RPC for the app's own signed-in client. Authenticated by Firebase Auth ID token, not by the bearer. One callable per operation, organised by feature folder under `functions/src/`. The canonical use is **minting a short-lived V4 signed URL for a private Storage object** — see CLAUDE-STACK.md "Storage privacy posture" for the pattern (it's how *all* client reads from Storage are intended to work in this stack).
 - **Background triggers** (`onDocumentCreated`, `onSchedule`, etc.) — separate exports, by feature folder.
 - **Anything called from the app's own signed-in client** — use a callable. The bearer secret is server-side; shipping it to the browser would defeat its purpose.
 

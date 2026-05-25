@@ -1,6 +1,30 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // CANONICAL PATTERN: Storage is fully private. The client NEVER reads
+    // (or writes) directly. Every object is served via a short-lived
+    // V4 signed URL minted by a Cloud Functions callable that has already
+    // authenticated the caller (Firebase Auth ID token) and authorised
+    // them against the `users` whitelist in Firestore.
+    //
+    // Why: cross-service Storage→Firestore rules (`firestore.exists(...)`
+    // inside a storage rule) silently fail in production for opaque
+    // reasons, with no actionable error. Keeping the access decision in
+    // a callable means it's testable TypeScript, not untestable rule DSL.
+    //
+    // What this needs at the project level (already provisioned by `n` —
+    // see ../aa/n's `grant_token_creator`): the Cloud Functions runtime
+    // service account holds `roles/iam.serviceAccountTokenCreator` on
+    // itself. Without that, `file.getSignedUrl()` 500s in the runtime
+    // (it has no SA private key locally; it signs via the IAM Credentials
+    // API, which requires self-impersonation).
+    //
+    // To add a new private-Storage feature: write objects from a Cloud
+    // Function (Admin SDK bypasses these rules), expose reads via a new
+    // callable that calls `getSignedUrl({ version: 'v4', action: 'read',
+    // expires: Date.now() + N_MS })`. See docs/CLAUDE-STACK.md → "Storage
+    // privacy posture" for the full pattern.
     match /{allPaths=**} {
       allow read, write: if false;
     }

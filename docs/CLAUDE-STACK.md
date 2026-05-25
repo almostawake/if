@@ -18,7 +18,7 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | Components | **shadcn-svelte** + **bits-ui** | Components are *copied into the repo*, not a dependency. LLMs can grep and read the exact API instead of hallucinating props. |
 | Icons | **lucide-svelte** | De-facto standard, huge set, tree-shakes. |
 | State | **Class-based rune stores** | One class per domain, `$state` + methods + `$derived` co-located. See "State pattern" below. |
-| Backend | **Firebase** — Auth, Firestore, Functions, Storage | Same as reference app. All resources in one region, chosen at project creation — see "Region" below. |
+| Backend | **Firebase** — Auth, Firestore, Functions, Storage (private; signed-URL access only) | Same as reference app. All resources in one region, chosen at project creation — see "Region" below. Storage is fully private; access goes through callable-minted signed URLs — see "Storage privacy posture" below. |
 | Auth (default) | **Firebase Auth — Email Link sign-in** + `users` whitelist in Firestore (doc id = lowercased email) | Gates `/admin/*` only. End users at `/` are anonymous (no sign-in). Zero passwords, no OAuth consent screen, signed-in users self-administer from `/admin`. See ../CLAUDE.md "Auth & deploy → flow 1" for details. |
 | Validation | **Zod** | Used at every I/O boundary: form → Firestore, LLM response → typed object, scraped fields → typed object. |
 | LLM | **Gemini API** (via a Cloud Function that holds the key) | Single LLM SDK across the stack. Key lives server-side. Costs are real — no free tier to hide behind. |
@@ -39,6 +39,43 @@ Every Firebase resource for a project lives in **one region**, chosen once when 
 - **Cloud Functions** (and the Cloud Run services + Artifact Registry repos they spawn) — deploy to that same region automatically. `n` records the region in `.env` as `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`; the functions build generates `functions/src/region.ts` from it (`cmd-region.mjs`), and `setGlobalOptions` reads it in `functions/src/index.ts`. It's baked into source rather than passed as an env var because firebase-tools runs functions discovery in a subprocess with a fixed, minimal env that user values never reach. `region.ts` is gitignored and regenerated on every build.
 
 Functions always sit with their data — no cross-region latency or egress. Don't override per-function; if you genuinely need a function elsewhere, set `region` on that specific `onRequest` / `onCall`, not on `setGlobalOptions`.
+
+---
+
+## Storage privacy posture
+
+**Cloud Storage is fully private. The client never reads or writes objects directly.** `storage.rules` denies everything. Every read goes through a Cloud Functions callable that authenticates the caller (Firebase Auth ID token), authorises them against the `users` whitelist, and mints a short-lived V4 signed URL that the browser fetches with no token plumbing.
+
+Why not the obvious-looking `match /foo/{x} { allow read: if request.auth != null && firestore.exists(...) }`: cross-service Storage→Firestore rules silently 403 in production with no actionable error. We've burned a day on this; not doing it again. Putting the access decision in TypeScript means it's testable, greppable, and the failure mode is a typed exception, not an empty `<audio>` element.
+
+**Project setup `n` already does for you:** the Cloud Functions runtime service account (`<project-number>-compute@developer.gserviceaccount.com`) is granted `roles/iam.serviceAccountTokenCreator` on **itself**. Without this, `file.getSignedUrl()` 500s in the runtime — there's no SA private key locally, so signing falls back to the IAM Credentials API, which requires self-impersonation. The binding is provisioned by `aa/n`'s `grant_token_creator` row on every project; do not remove it. If signing ever 500s on a project you didn't provision via `n`, this is the missing piece.
+
+**Pattern for a new private-Storage feature:**
+
+1. **Write** objects from a Cloud Function via the Admin SDK (`getStorage().bucket().file(path).save(buf)`). Admin SDK bypasses storage rules.
+2. **Read** via a new callable in `functions/src/<feature>/` that returns `{ url }` (or `{ url: null }` when the file doesn't exist):
+   ```ts
+   export const getThingUrl = onCall({ region: FUNCTIONS_REGION }, async (request) => {
+     const email = request.auth?.token?.email;
+     if (!email) throw new HttpsError('unauthenticated', 'sign-in required');
+     const onWhitelist = (await getFirestore().doc(`users/${email.toLowerCase()}`).get()).exists;
+     if (!onWhitelist) throw new HttpsError('permission-denied', 'not on the users whitelist');
+     // ...validate the input id, build the Storage path...
+     const file = getStorage().bucket().file(path);
+     const [exists] = await file.exists();
+     if (!exists) return { url: null };
+     const [url] = await file.getSignedUrl({
+       version: 'v4', action: 'read', expires: Date.now() + 15 * 60 * 1000,
+     });
+     return { url };
+   });
+   ```
+3. **Export** it from `functions/src/index.ts` (separate from the `api` Express function — see CLAUDE-API.md).
+4. **Client** calls it with `httpsCallable(functions, 'getThingUrl')`. Drop the result straight into `<img src>` / `<audio src>` / wherever.
+
+Keep the TTL short (15min is the default for playback-style use; tighten further for higher-sensitivity data). The URL carries its own credential, so the browser fetches the object directly with no further auth plumbing.
+
+**Do not** add per-path rule blocks to `storage.rules`. If you find yourself wanting to, you almost certainly want a new callable instead.
 
 ---
 
