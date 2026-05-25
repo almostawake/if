@@ -5,45 +5,53 @@
 // Single entry point for token validity. Callers don't have to know
 // whether a probe, a refresh, or a fresh consent flow is required.
 //
-// Multi-account: pass an email as the first positional arg to ensure
-// auth for that specific account. Each account has its own file with
-// its own refresh token, kept independent. Without an arg, uses the
-// default (single-account) file — preserves prior behavior.
+// One file per account (no "default" file). Without a positional arg,
+// the account comes from EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in the project's .env — that's
+// the primary deployment account for this checkout. Pass an explicit
+// email as the first positional arg to act on a different account.
 //
 // Behavior (per account):
-//   1. Read .env.auth[.<email>].json. Missing → grant flow.
-//   2. Probe stored access_token against userinfo. 200 → done.
-//   3. On 401/403 → POST refresh_token. 200 → atomic write-back, done.
-//   4. On 400 invalid_grant → grant flow.
-//   5. Other refresh failures → throw (network, 5xx, etc.).
+//   1. Resolve account → ~/.if/creds/.env.auth.<email>.json.
+//   2. Read cred file. Missing → grant flow.
+//   3. Probe stored access_token against userinfo. 200 → done.
+//   4. On 401/403 → POST refresh_token. 200 → atomic write-back, done.
+//   5. On 400 invalid_grant → grant flow.
+//   6. Other refresh failures → throw (network, 5xx, etc.).
 //
 // Library:  import { ensureValidToken } from './cmd-auth.mjs'
-//             ensureValidToken()                       — default file
-//             ensureValidToken({ account: '<email>' }) — per-account
-// CLI:      node cmd-auth.mjs                         default
+//             ensureValidToken()                       — uses EMAIL_OF_GOOGLE_HOSTING_ACCOUNT
+//             ensureValidToken({ account: '<email>' }) — explicit
+// CLI:      node cmd-auth.mjs                         uses EMAIL_OF_GOOGLE_HOSTING_ACCOUNT
 //           node cmd-auth.mjs <email>                 per-account
 //           node cmd-auth.mjs [<email>] --status      probe-only
 //           node cmd-auth.mjs [<email>] --force       force fresh grant
 //           node cmd-auth.mjs [<email>] --token       print access_token
+//           node cmd-auth.mjs --discover              first-time sign-in
+//                                                     (no account known up
+//                                                     front; reads email
+//                                                     from userinfo, writes
+//                                                     ~/.if/creds/.env.auth
+//                                                     .<email>.json, prints
+//                                                     the discovered email
+//                                                     to stdout)
 //
-// Storage:  .env.auth.json                  default
-//           .env.auth.<email>.json          per-account (literal email)
-//           chmod 600, gitignored. Sort adjacent to .env in listings.
+// Storage:  ~/.if/creds/.env.auth.<email>.json   (chmod 600, dir 700)
+//           Outside the project tree on purpose — same Google account is
+//           reused across multiple projects; nothing project-scoped here.
 //
-// Account binding: when an account is requested, the OAuth URL carries
-// login_hint=<email> (Google pre-selects that account; chooser still
-// shows when needed). Post-grant we verify userinfo.email matches the
-// requested account (case-insensitive). Mismatch = hard error, no file
-// written.
+// Account binding: the OAuth URL carries login_hint=<email> (Google
+// pre-selects that account; chooser still shows when needed). Post-grant
+// we verify userinfo.email matches the requested account
+// (case-insensitive). Mismatch = hard error, no file written.
 //
-// Timeouts: HTTP calls = 25s. Browser consent = 60s on first-time, 25s
-// thereafter (a stuck flow fails fast; a re-run is cheap).
+// Timeouts: HTTP calls = 25s. Browser consent = 5min on every flow.
 //
 // OAuth client: gcloud's public installed-app (client_id 32555940559).
 // Identical client to `gcloud auth login`. cloud-platform scope covers
 // every Firebase + GCP REST API this template uses.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
@@ -54,22 +62,52 @@ const CLIENT_SECRET = 'ZmssLNjJy2998hD4CTg2ejr2';
 const SCOPE = 'openid email https://www.googleapis.com/auth/cloud-platform';
 
 const HTTP_TIMEOUT_MS = 25_000;
-const BROWSER_TIMEOUT_FIRST_MS = 300_000;
-const BROWSER_TIMEOUT_REPEAT_MS = 300_000;
+const BROWSER_TIMEOUT_MS = 300_000;
 
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
+const CREDS_DIR = path.join(os.homedir(), '.if', 'creds');
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/auth';
 
-// Per-account file when account is given, default file otherwise. The
-// email is preserved literally in the filename (filesystems handle @/.
-// fine, and an unsanitised email keeps the file unambiguously tied to
-// the account it auths).
+// Read EMAIL_OF_GOOGLE_HOSTING_ACCOUNT from the project's .env. Same simple parser the
+// deploy wrapper uses — values are bare strings, no quoting weirdness.
+function envAccountEmail() {
+  const file = path.join(PROJECT_ROOT, '.env');
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); }
+  catch (e) {
+    if (e.code === 'ENOENT') return null;
+    throw e;
+  }
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = line.match(/^EMAIL_OF_GOOGLE_HOSTING_ACCOUNT\s*=\s*(.*)$/);
+    if (!m) continue;
+    let v = m[1].trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+      v = v.slice(1, -1);
+    }
+    return v || null;
+  }
+  return null;
+}
+
+// Resolve the account to use: explicit arg wins, else .env EMAIL_OF_GOOGLE_HOSTING_ACCOUNT.
+// Throws when neither is set — there is no default file fallback.
+function resolveAccount(arg) {
+  if (arg) return arg;
+  const env = envAccountEmail();
+  if (env) return env;
+  throw new Error(
+    'no account: pass one as the first positional arg ' +
+    '(e.g. `node cmd-auth.mjs alice@x.com`) or set EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in .env',
+  );
+}
+
 function credPath(account) {
-  return account
-    ? path.join(PROJECT_ROOT, `.env.auth.${account}.json`)
-    : path.join(PROJECT_ROOT, '.env.auth.json');
+  return path.join(CREDS_DIR, `.env.auth.${account}.json`);
 }
 
 function readCred(account) {
@@ -79,6 +117,11 @@ function readCred(account) {
 }
 
 function writeCred(cred, account) {
+  // Ensure the creds dir exists and is locked down. mkdir -p is a no-op
+  // when present; chmod each call keeps the dir at 700 even if something
+  // else widened it.
+  fs.mkdirSync(CREDS_DIR, { recursive: true, mode: 0o700 });
+  try { fs.chmodSync(CREDS_DIR, 0o700); } catch { /* not ours / non-fatal */ }
   const p = credPath(account);
   const tmp = `${p}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(cred, null, 2));
@@ -222,6 +265,8 @@ async function grant({ timeoutMs, account }) {
         // login_hint is a hint, not a constraint — user can still pick a
         // different account in the chooser. Reject mismatches loudly so
         // we don't write the wrong account's tokens to the wrong file.
+        // (Discovery mode passes account=null and skips this check —
+        // whatever the user picks IS the account.)
         if (account && email.toLowerCase() !== account.toLowerCase()) {
           res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
           res.end(ERROR_HTML(`Signed in as ${email}, not ${account}`));
@@ -259,7 +304,7 @@ async function grant({ timeoutMs, account }) {
         response_type: 'code',
         scope: SCOPE,
         access_type: 'offline',
-        prompt: 'consent'
+        prompt: 'consent',
       });
       if (account) params.set('login_hint', account);
       const url = `${AUTH_URL}?${params}`;
@@ -277,14 +322,16 @@ async function grant({ timeoutMs, account }) {
 }
 
 // Returns a fresh, valid access_token. Side effect: may write the cred
-// file (.env.auth.json or .env.auth.<email>.json depending on account).
-// Throws when no valid path forward exists (network down, user dismissed, etc.).
+// file at ~/.if/creds/.env.auth.<email>.json. Throws when no valid path
+// forward exists (network down, user dismissed, etc.) or when neither
+// `account` nor EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in .env identifies an account.
 export async function ensureValidToken({ force = false, account } = {}) {
-  const credFile = credPath(account);
+  const resolved = resolveAccount(account);
+  const credFile = credPath(resolved);
   const isFirstTime = !fs.existsSync(credFile);
 
   if (!force && !isFirstTime) {
-    const cred = readCred(account);
+    const cred = readCred(resolved);
     const stored = cred?.tokens?.access_token;
     if (stored) {
       const probeRes = await probe(stored);
@@ -299,7 +346,7 @@ export async function ensureValidToken({ force = false, account } = {}) {
     if (cred?.tokens?.refresh_token) {
       try {
         const newTokens = await refresh(cred);
-        writeCred({ ...cred, tokens: newTokens }, account);
+        writeCred({ ...cred, tokens: newTokens }, resolved);
         return newTokens.access_token;
       } catch (e) {
         if (e.code !== 'INVALID_GRANT') throw e;
@@ -313,9 +360,8 @@ export async function ensureValidToken({ force = false, account } = {}) {
     }
   }
 
-  const timeoutMs = isFirstTime ? BROWSER_TIMEOUT_FIRST_MS : BROWSER_TIMEOUT_REPEAT_MS;
-  const { email, tokens } = await grant({ timeoutMs, account });
-  writeCred({ email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens }, account);
+  const { email, tokens } = await grant({ timeoutMs: BROWSER_TIMEOUT_MS, account: resolved });
+  writeCred({ email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens }, resolved);
   console.error(`✓  signed in as ${email}`);
   return tokens.access_token;
 }
@@ -327,9 +373,43 @@ if (isMain) {
   const force = args.includes('--force');
   const status = args.includes('--status');
   const wantsToken = args.includes('--token');
-  // First non-flag arg = account email (or undefined for default).
-  const account = args.find(a => !a.startsWith('--'));
-  const credLabel = account ? `.env.auth.${account}.json` : '.env.auth.json';
+  const discover = args.includes('--discover');
+  // First non-flag arg = explicit account; else fall back to EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in .env.
+  const arg = args.find(a => !a.startsWith('--'));
+
+  // Discovery mode: no account known up front. Run the OAuth flow, read
+  // userinfo.email, write the cred file using that email, print the email
+  // to stdout. Used by aa/n for first-time sign-in where the account is
+  // whatever the user chooses in the browser. Mutex with everything else.
+  if (discover) {
+    if (arg) {
+      console.error('error: --discover does not take a positional account');
+      process.exit(2);
+    }
+    if (status || force) {
+      console.error('error: --discover is mutex with --status and --force');
+      process.exit(2);
+    }
+    try {
+      const { email, tokens } = await grant({ timeoutMs: BROWSER_TIMEOUT_MS, account: null });
+      writeCred({ email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens }, email);
+      console.error(`✓  signed in as ${email}`);
+      console.log(email);
+      process.exit(0);
+    } catch (e) {
+      console.error(`error: ${e.message}`);
+      process.exit(2);
+    }
+  }
+
+  let account;
+  try {
+    account = resolveAccount(arg);
+  } catch (e) {
+    console.error(`error: ${e.message}`);
+    process.exit(2);
+  }
+  const credLabel = credPath(account);
 
   if (status) {
     const cred = readCred(account);

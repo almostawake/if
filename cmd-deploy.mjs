@@ -9,7 +9,7 @@
 //
 // Auth model: firebase-tools runs in ADC mode. We synthesize a one-off
 // .adc.json from the project's stored OAuth refresh token (written by
-// cmd-auth.mjs at .env.auth.json or .env.auth.<email>.json), point
+// cmd-auth.mjs at ~/.if/creds/.env.auth.<email>.json), point
 // GOOGLE_APPLICATION_CREDENTIALS at it, and let firebase-tools refresh
 // as needed. Cleaned up in the finally block.
 //
@@ -21,10 +21,12 @@
 //
 // Inputs (.env or process.env):
 //   THIS_PROJECT_ID_ON_GOOGLE_HOSTING  required — the GCP/Firebase project id
-//   ACCOUNT_EMAIL                      optional — picks .env.auth.<email>.json
-//                                      (defaults to .env.auth.json)
+//   EMAIL_OF_GOOGLE_HOSTING_ACCOUNT                      required — picks the cred file at
+//                                      ~/.if/creds/.env.auth.<email>.json
+//                                      (no default, no fallback)
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -55,21 +57,15 @@ if (!project) {
   process.exit(2);
 }
 
-// File resolution: prefer .env.auth.<ACCOUNT_EMAIL>.json when the
-// per-account file exists; otherwise fall back to the default
-// .env.auth.json. n's first-deploy writes ACCOUNT_EMAIL but only the
-// default cred file (no per-account rename), so the fallback is what
-// makes that flow work without special-casing.
-const account = process.env.ACCOUNT_EMAIL;
-const perAccount = account ? `.env.auth.${account}.json` : null;
-const defaultFile = '.env.auth.json';
-const authFile =
-  perAccount && fs.existsSync(perAccount) ? perAccount :
-  fs.existsSync(defaultFile) ? defaultFile :
-  null;
-if (!authFile) {
-  const hint = account ? ` -- ${account}` : '';
-  console.error(`error: no .env.auth*.json found — run \`npm run auth${hint}\` first`);
+const account = process.env.EMAIL_OF_GOOGLE_HOSTING_ACCOUNT;
+if (!account) {
+  console.error('error: EMAIL_OF_GOOGLE_HOSTING_ACCOUNT not set in .env — required to locate the OAuth cred file');
+  process.exit(2);
+}
+
+const authFile = path.join(os.homedir(), '.if', 'creds', `.env.auth.${account}.json`);
+if (!fs.existsSync(authFile)) {
+  console.error(`error: no cred file at ${authFile} — run \`npm run auth\` to grant ${account}`);
   process.exit(2);
 }
 
@@ -105,7 +101,7 @@ fs.writeFileSync(
 // aren't useful for this template's solo-dev flow.
 const passthrough = process.argv.slice(2);
 const args = ['firebase', 'deploy', '--project', project, '--force', ...passthrough];
-console.log(`deploy: project=${project} auth=${authFile} → npx ${args.join(' ')}`);
+console.log(`deploy: project=${project} account=${account} → npx ${args.join(' ')}`);
 
 // firebase-tools persists its own signed-in user in
 // $XDG_CONFIG_HOME/configstore/firebase-tools.json (via the `configstore`
@@ -113,8 +109,7 @@ console.log(`deploy: project=${project} auth=${authFile} → npx ${args.join(' '
 // account takes priority over GOOGLE_APPLICATION_CREDENTIALS — even when the
 // stored account has no rights on THIS project. We give firebase-tools an
 // empty XDG_CONFIG_HOME for this run so it falls back to ADC. The user's
-// global firebase-tools state is untouched. (macOS/Linux only — firebase-
-// tools' configstore uses a different path on Windows.)
+// global firebase-tools state is untouched.
 const sandboxConfigHome = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'firebase-deploy-'));
 
 let exitCode = 0;

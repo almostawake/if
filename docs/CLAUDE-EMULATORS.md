@@ -30,7 +30,7 @@ Verify shutdown: `lsof -i :4000 -i :4400 -i :9099 -i :5001 -i :8080 -i :9199 >/d
 
 Only `/admin` is gated; end users at `/` are anonymous. The gate rejects sign-in unless the user's email exists at Firestore `/users/{email}`.
 
-**Auto-seeded on every `npm run start:emulators`** by `cmd-seed-user.mjs` — backgrounded at emulator start, waits for Firestore readiness, reads the owner's email from `.env.auth.json`, writes the doc if missing. Idempotent. No action required from you on a normal start.
+**Auto-seeded on every `npm run start:emulators`** by `cmd-seed-user.mjs` — backgrounded at emulator start, waits for Firestore readiness, reads the owner's email from `EMAIL_OF_GOOGLE_HOSTING_ACCOUNT` in `.env`, writes the doc if missing. Idempotent. No action required from you on a normal start.
 
 To add a *different* email manually (e.g. seeding a second user before they can be added through `/admin` itself):
 
