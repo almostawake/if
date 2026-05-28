@@ -26,6 +26,7 @@
 //           node cmd-auth.mjs [<email>] --status      probe-only
 //           node cmd-auth.mjs [<email>] --force       force fresh grant
 //           node cmd-auth.mjs [<email>] --token       print access_token
+//           node cmd-auth.mjs [<email>] --project=<id> also write ADC
 //           node cmd-auth.mjs --discover              first-time sign-in
 //                                                     (no account known up
 //                                                     front; reads email
@@ -38,6 +39,15 @@
 // Storage:  ~/.if/creds/.env.auth.<email>.json   (chmod 600, dir 700)
 //           Outside the project tree on purpose — same Google account is
 //           reused across multiple projects; nothing project-scoped here.
+//
+// ADC side-effect: when a project is resolved (--project=<id> flag, or
+//           THIS_PROJECT_ID_ON_GOOGLE_HOSTING in the project's .env), every
+//           successful auth path also writes an ADC file at
+//           ~/.config/gcloud/application_default_credentials.json
+//           (CLOUDSDK_CONFIG / Windows %APPDATA% honored). This lets code
+//           that reads ADC directly — without depending on cmd-auth.mjs —
+//           refresh tokens against the cred stored in ~/.if/creds. No
+//           project resolved → ADC is not written. --status never writes.
 //
 // Account binding: the OAuth URL carries login_hint=<email> (Google
 // pre-selects that account; chooser still shows when needed). Post-grant
@@ -70,9 +80,20 @@ const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/auth';
 
-// Read EMAIL_OF_GOOGLE_HOSTING_ACCOUNT from the project's .env. Same simple parser the
+// Mirrors gcloud's own ADC discovery: CLOUDSDK_CONFIG wins; else
+// %APPDATA%\gcloud on Windows; else ~/.config/gcloud on Unix.
+const ADC_PATH = (() => {
+  const override = process.env.CLOUDSDK_CONFIG;
+  if (override) return path.join(override, 'application_default_credentials.json');
+  if (process.platform === 'win32' && process.env.APPDATA) {
+    return path.join(process.env.APPDATA, 'gcloud', 'application_default_credentials.json');
+  }
+  return path.join(os.homedir(), '.config', 'gcloud', 'application_default_credentials.json');
+})();
+
+// Read a single key from the project's .env. Same simple parser the
 // deploy wrapper uses — values are bare strings, no quoting weirdness.
-function envAccountEmail() {
+function envValue(key) {
   const file = path.join(PROJECT_ROOT, '.env');
   let text;
   try { text = fs.readFileSync(file, 'utf8'); }
@@ -80,10 +101,11 @@ function envAccountEmail() {
     if (e.code === 'ENOENT') return null;
     throw e;
   }
+  const re = new RegExp(`^${key}\\s*=\\s*(.*)$`);
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line || line.startsWith('#')) continue;
-    const m = line.match(/^EMAIL_OF_GOOGLE_HOSTING_ACCOUNT\s*=\s*(.*)$/);
+    const m = line.match(re);
     if (!m) continue;
     let v = m[1].trim();
     if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
@@ -98,12 +120,20 @@ function envAccountEmail() {
 // Throws when neither is set — there is no default file fallback.
 function resolveAccount(arg) {
   if (arg) return arg;
-  const env = envAccountEmail();
+  const env = envValue('EMAIL_OF_GOOGLE_HOSTING_ACCOUNT');
   if (env) return env;
   throw new Error(
     'no account: pass one as the first positional arg ' +
     '(e.g. `node cmd-auth.mjs alice@x.com`) or set EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in .env',
   );
+}
+
+// Resolve project for ADC quota_project_id. --project=<id> wins, else
+// THIS_PROJECT_ID_ON_GOOGLE_HOSTING in .env. Returns null when unknown —
+// the caller skips ADC writing in that case.
+function resolveProject(arg) {
+  if (arg) return arg;
+  return envValue('THIS_PROJECT_ID_ON_GOOGLE_HOSTING');
 }
 
 function credPath(account) {
@@ -127,6 +157,28 @@ function writeCred(cred, account) {
   fs.writeFileSync(tmp, JSON.stringify(cred, null, 2));
   fs.chmodSync(tmp, 0o600);
   fs.renameSync(tmp, p);
+}
+
+// Write an ADC file at the gcloud-conventional location. The OAuth client
+// ID we use (32555940559) differs from `gcloud auth application-default
+// login`'s client (764086051850), but both are public Google clients and
+// google-auth-libs just refresh whatever client_id/secret/refresh_token
+// trio the file carries — they don't pin to a specific client.
+function writeAdc(cred, project) {
+  const adc = {
+    type: 'authorized_user',
+    client_id: cred.client_id,
+    client_secret: cred.client_secret,
+    refresh_token: cred.tokens.refresh_token,
+    quota_project_id: project,
+    universe_domain: 'googleapis.com',
+    account: cred.email,
+  };
+  fs.mkdirSync(path.dirname(ADC_PATH), { recursive: true });
+  const tmp = `${ADC_PATH}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(adc, null, 2));
+  fs.chmodSync(tmp, 0o600);
+  fs.renameSync(tmp, ADC_PATH);
 }
 
 async function fetchWithTimeout(url, opts = {}, timeoutMs = HTTP_TIMEOUT_MS) {
@@ -321,12 +373,16 @@ async function grant({ timeoutMs, account }) {
   });
 }
 
-// Returns a fresh, valid access_token. Side effect: may write the cred
-// file at ~/.if/creds/.env.auth.<email>.json. Throws when no valid path
-// forward exists (network down, user dismissed, etc.) or when neither
-// `account` nor EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in .env identifies an account.
-export async function ensureValidToken({ force = false, account } = {}) {
+// Returns a fresh, valid access_token. Side effects: may write the cred
+// file at ~/.if/creds/.env.auth.<email>.json, and (when `project` is
+// resolved via arg or .env) also writes/refreshes ADC at the gcloud
+// conventional location so non-cmd-auth-aware code can refresh tokens
+// against the same cred. Throws when no valid path forward exists
+// (network down, user dismissed, etc.) or when neither `account` nor
+// EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in .env identifies an account.
+export async function ensureValidToken({ force = false, account, project } = {}) {
   const resolved = resolveAccount(account);
+  const resolvedProject = resolveProject(project);
   const credFile = credPath(resolved);
   const isFirstTime = !fs.existsSync(credFile);
 
@@ -335,7 +391,10 @@ export async function ensureValidToken({ force = false, account } = {}) {
     const stored = cred?.tokens?.access_token;
     if (stored) {
       const probeRes = await probe(stored);
-      if (probeRes.ok) return stored;
+      if (probeRes.ok) {
+        if (resolvedProject) writeAdc(cred, resolvedProject);
+        return stored;
+      }
       if (probeRes.status !== 401 && probeRes.status !== 403) {
         const text = await probeRes.text();
         throw new Error(`unexpected ${probeRes.status} probing access_token: ${text.slice(0, 300)}`);
@@ -346,7 +405,9 @@ export async function ensureValidToken({ force = false, account } = {}) {
     if (cred?.tokens?.refresh_token) {
       try {
         const newTokens = await refresh(cred);
-        writeCred({ ...cred, tokens: newTokens }, resolved);
+        const updated = { ...cred, tokens: newTokens };
+        writeCred(updated, resolved);
+        if (resolvedProject) writeAdc(updated, resolvedProject);
         return newTokens.access_token;
       } catch (e) {
         if (e.code !== 'INVALID_GRANT') throw e;
@@ -361,7 +422,9 @@ export async function ensureValidToken({ force = false, account } = {}) {
   }
 
   const { email, tokens } = await grant({ timeoutMs: BROWSER_TIMEOUT_MS, account: resolved });
-  writeCred({ email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens }, resolved);
+  const newCred = { email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens };
+  writeCred(newCred, resolved);
+  if (resolvedProject) writeAdc(newCred, resolvedProject);
   console.error(`✓  signed in as ${email}`);
   return tokens.access_token;
 }
@@ -374,6 +437,10 @@ if (isMain) {
   const status = args.includes('--status');
   const wantsToken = args.includes('--token');
   const discover = args.includes('--discover');
+  // --project=<id> for ADC writing. Empty value treated as not-set so
+  // `--project=` doesn't poison ADC with an empty quota_project_id.
+  const projectFlag = args.find(a => a.startsWith('--project='));
+  const projectArg = projectFlag ? projectFlag.slice('--project='.length) || null : null;
   // First non-flag arg = explicit account; else fall back to EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in .env.
   const arg = args.find(a => !a.startsWith('--'));
 
@@ -392,7 +459,10 @@ if (isMain) {
     }
     try {
       const { email, tokens } = await grant({ timeoutMs: BROWSER_TIMEOUT_MS, account: null });
-      writeCred({ email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens }, email);
+      const newCred = { email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens };
+      writeCred(newCred, email);
+      const resolvedProject = resolveProject(projectArg);
+      if (resolvedProject) writeAdc(newCred, resolvedProject);
       console.error(`✓  signed in as ${email}`);
       console.log(email);
       process.exit(0);
@@ -437,7 +507,7 @@ if (isMain) {
   }
 
   try {
-    const token = await ensureValidToken({ force, account });
+    const token = await ensureValidToken({ force, account, project: projectArg });
     if (wantsToken) console.log(token);
     process.exit(0);
   } catch (e) {
