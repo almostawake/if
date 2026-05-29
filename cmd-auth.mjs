@@ -46,8 +46,11 @@
 //           ~/.config/gcloud/application_default_credentials.json
 //           (CLOUDSDK_CONFIG / Windows %APPDATA% honored). This lets code
 //           that reads ADC directly — without depending on cmd-auth.mjs —
-//           refresh tokens against the cred stored in ~/.if/creds. No
-//           project resolved → ADC is not written. --status never writes.
+//           refresh tokens against the cred stored in ~/.if/creds.
+//           --token (print-only) and --status (read-only) never write ADC and
+//           need no project. The bare auth path, however, exists to set up ADC,
+//           so with no project resolved it FAILS (exit 2) rather than silently
+//           leaving a stale/missing ADC behind.
 //
 // Account binding: the OAuth URL carries login_hint=<email> (Google
 // pre-selects that account; chooser still shows when needed). Post-grant
@@ -504,6 +507,21 @@ if (isMain) {
       console.error(`error probing: ${e.message}`);
       process.exit(2);
     }
+  }
+
+  // The bare auth path exists to set up ADC. Without a resolved project,
+  // writeAdc is skipped and we'd exit 0 having silently left any stale/broken
+  // ADC in place — the caller then thinks auth is ready and fails later with a
+  // confusing 403 / undefined quota_project_id. Fail loudly instead. --token
+  // (print-only) and --status (read-only) legitimately need no project and are
+  // already handled above, so this only gates the ADC-writing path.
+  if (!wantsToken && !resolveProject(projectArg)) {
+    console.error(
+      'error: no project resolved — refusing to auth without writing ADC.\n' +
+      '       pass --project=<id>, or set THIS_PROJECT_ID_ON_GOOGLE_HOSTING in the project .env.\n' +
+      '       (use --token to just print an access token without touching ADC.)',
+    );
+    process.exit(2);
   }
 
   try {
