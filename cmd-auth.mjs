@@ -6,9 +6,10 @@
 // whether a probe, a refresh, or a fresh consent flow is required.
 //
 // One file per account (no "default" file). Without a positional arg,
-// the account comes from EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in the project's .env — that's
-// the primary deployment account for this checkout. Pass an explicit
-// email as the first positional arg to act on a different account.
+// the account is resolved from EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in the
+// project's .env (this checkout's deploy account), falling back to
+// IF_DEFAULT_GOOGLE_USER in ~/.if/.env (the machine-wide default). Pass
+// an explicit email as the first positional arg to act on another.
 //
 // Behavior (per account):
 //   1. Resolve account → ~/.if/creds/.env.auth.<email>.json.
@@ -19,9 +20,9 @@
 //   6. Other refresh failures → throw (network, 5xx, etc.).
 //
 // Library:  import { ensureValidToken } from './cmd-auth.mjs'
-//             ensureValidToken()                       — uses EMAIL_OF_GOOGLE_HOSTING_ACCOUNT
+//             ensureValidToken()                       — resolves account (above)
 //             ensureValidToken({ account: '<email>' }) — explicit
-// CLI:      node cmd-auth.mjs                         uses EMAIL_OF_GOOGLE_HOSTING_ACCOUNT
+// CLI:      node cmd-auth.mjs                         resolves account (above)
 //           node cmd-auth.mjs <email>                 per-account
 //           node cmd-auth.mjs [<email>] --status      probe-only
 //           node cmd-auth.mjs [<email>] --force       force fresh grant
@@ -79,6 +80,9 @@ const BROWSER_TIMEOUT_MS = 300_000;
 
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const CREDS_DIR = path.join(os.homedir(), '.if', 'creds');
+// Central, machine-wide if config (project parent, default account).
+// Same file aa/n seeds + sources; we read it as the account fallback.
+const IF_ENV = path.join(os.homedir(), '.if', '.env');
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/auth';
@@ -94,10 +98,9 @@ const ADC_PATH = (() => {
   return path.join(os.homedir(), '.config', 'gcloud', 'application_default_credentials.json');
 })();
 
-// Read a single key from the project's .env. Same simple parser the
+// Read a single key from a .env-style file. Same simple parser the
 // deploy wrapper uses — values are bare strings, no quoting weirdness.
-function envValue(key) {
-  const file = path.join(PROJECT_ROOT, '.env');
+function readEnvKey(file, key) {
   let text;
   try { text = fs.readFileSync(file, 'utf8'); }
   catch (e) {
@@ -119,15 +122,27 @@ function envValue(key) {
   return null;
 }
 
-// Resolve the account to use: explicit arg wins, else .env EMAIL_OF_GOOGLE_HOSTING_ACCOUNT.
-// Throws when neither is set — there is no default file fallback.
+// Project-local .env (next to this script) and the machine-wide ~/.if/.env.
+function envValue(key) { return readEnvKey(path.join(PROJECT_ROOT, '.env'), key); }
+function globalValue(key) { return readEnvKey(IF_ENV, key); }
+
+// Resolve the account to use, in precedence order:
+//   1. explicit arg (CLI positional / { account });
+//   2. EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in the project's .env — the
+//      account this checkout deploys as (project-specific, wins over the
+//      machine default so multi-account setups deploy correctly);
+//   3. IF_DEFAULT_GOOGLE_USER in ~/.if/.env — the machine-wide default.
+// Throws when none resolve.
 function resolveAccount(arg) {
   if (arg) return arg;
   const env = envValue('EMAIL_OF_GOOGLE_HOSTING_ACCOUNT');
   if (env) return env;
+  const fallback = globalValue('IF_DEFAULT_GOOGLE_USER');
+  if (fallback) return fallback;
   throw new Error(
     'no account: pass one as the first positional arg ' +
-    '(e.g. `node cmd-auth.mjs alice@x.com`) or set EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in .env',
+    '(e.g. `node cmd-auth.mjs alice@x.com`), set EMAIL_OF_GOOGLE_HOSTING_ACCOUNT ' +
+    'in .env, or IF_DEFAULT_GOOGLE_USER in ~/.if/.env',
   );
 }
 
