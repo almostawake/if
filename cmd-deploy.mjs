@@ -9,7 +9,7 @@
 //
 // Auth model: firebase-tools runs in ADC mode. We synthesize a one-off
 // .adc.json from the project's stored OAuth refresh token (written by
-// cmd-auth.mjs at ~/.if/creds/.env.auth.<email>.json), point
+// cmd-auth.mjs at ~/.if/creds/google.<email>.json), point
 // GOOGLE_APPLICATION_CREDENTIALS at it, and let firebase-tools refresh
 // as needed. Cleaned up in the finally block.
 //
@@ -22,7 +22,7 @@
 // Inputs (.env or process.env):
 //   THIS_PROJECT_ID_ON_GOOGLE_HOSTING  required — the GCP/Firebase project id
 //   EMAIL_OF_GOOGLE_HOSTING_ACCOUNT                      required — picks the cred file at
-//                                      ~/.if/creds/.env.auth.<email>.json
+//                                      ~/.if/creds/google.<email>.json
 //                                      (no default, no fallback)
 
 import fs from 'node:fs';
@@ -63,7 +63,7 @@ if (!account) {
   process.exit(2);
 }
 
-const authFile = path.join(os.homedir(), '.if', 'creds', `.env.auth.${account}.json`);
+const authFile = path.join(os.homedir(), '.if', 'creds', `google.${account}.json`);
 if (!fs.existsSync(authFile)) {
   console.error(`error: no cred file at ${authFile} — run \`npm run auth\` to grant ${account}`);
   process.exit(2);

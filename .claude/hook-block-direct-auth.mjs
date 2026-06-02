@@ -24,7 +24,7 @@ const BLOCKED = /(firebase|firebase-tools)\s+login|gcloud\s+auth\s+(application-
 if (BLOCKED.test(cmd)) {
   console.error(
     "Blocked: this template manages Google OAuth itself " +
-    "(creds at ~/.if/creds/.env.auth.<email>.json). Run 'npm run auth' " +
+    "(creds at ~/.if/creds/google.<email>.json). Run 'npm run auth' " +
     "instead (uses EMAIL_OF_GOOGLE_HOSTING_ACCOUNT from .env), or 'npm run auth -- <email>' " +
     "for a non-default account. firebase emulators and 'npm run deploy*' " +
     "are unaffected."

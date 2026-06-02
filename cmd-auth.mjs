@@ -12,7 +12,7 @@
 // an explicit email as the first positional arg to act on another.
 //
 // Behavior (per account):
-//   1. Resolve account → ~/.if/creds/.env.auth.<email>.json.
+//   1. Resolve account → ~/.if/creds/google.<email>.json.
 //   2. Read cred file. Missing → grant flow.
 //   3. Probe stored access_token against userinfo. 200 → done.
 //   4. On 401/403 → POST refresh_token. 200 → atomic write-back, done.
@@ -32,14 +32,18 @@
 //                                                     (no account known up
 //                                                     front; reads email
 //                                                     from userinfo, writes
-//                                                     ~/.if/creds/.env.auth
-//                                                     .<email>.json, prints
+//                                                     ~/.if/creds/google.
+//                                                     <email>.json, prints
 //                                                     the discovered email
 //                                                     to stdout)
 //
-// Storage:  ~/.if/creds/.env.auth.<email>.json   (chmod 600, dir 700)
+// Storage:  ~/.if/creds/google.<email>.json   (chmod 600, dir 700)
 //           Outside the project tree on purpose — same Google account is
 //           reused across multiple projects; nothing project-scoped here.
+//           At module load, any project-local .env.auth*.json files
+//           (the historic pre-migration location) are silently removed
+//           from PROJECT_ROOT — those creds are no longer read and lying
+//           around in the tree only invites confusion.
 //
 // ADC side-effect: when a project is resolved (--project=<id> flag, or
 //           THIS_PROJECT_ID_ON_GOOGLE_HOSTING in the project's .env), every
@@ -155,8 +159,24 @@ function resolveProject(arg) {
 }
 
 function credPath(account) {
-  return path.join(CREDS_DIR, `.env.auth.${account}.json`);
+  return path.join(CREDS_DIR, `google.${account}.json`);
 }
+
+// Silently delete any historic project-local cred files. They're no
+// longer read by anything; if their refresh tokens are still valid the
+// equivalent now lives at ~/.if/creds/google.<email>.json. If not,
+// `npm run auth` re-grants. Runs once at module load.
+function scrubLegacyCreds() {
+  let entries;
+  try { entries = fs.readdirSync(PROJECT_ROOT); }
+  catch { return; }
+  for (const name of entries) {
+    if (name === '.env.auth.json' || /^\.env\.auth\..+\.json$/.test(name)) {
+      try { fs.unlinkSync(path.join(PROJECT_ROOT, name)); } catch { /* best-effort */ }
+    }
+  }
+}
+scrubLegacyCreds();
 
 function readCred(account) {
   const p = credPath(account);
@@ -392,7 +412,7 @@ async function grant({ timeoutMs, account }) {
 }
 
 // Returns a fresh, valid access_token. Side effects: may write the cred
-// file at ~/.if/creds/.env.auth.<email>.json, and (when `project` is
+// file at ~/.if/creds/google.<email>.json, and (when `project` is
 // resolved via arg or .env) also writes/refreshes ADC at the gcloud
 // conventional location so non-cmd-auth-aware code can refresh tokens
 // against the same cred. Throws when no valid path forward exists

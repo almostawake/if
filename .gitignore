@@ -19,12 +19,6 @@ ui-debug.log
 .env
 .env.local
 .env.*.local
-# Google OAuth creds now live at ~/.if/creds/.env.auth.<email>.json
-# (out-of-tree). These patterns stay here defensively — if an old
-# checkout or a stray script ever writes one into the project, we still
-# refuse to commit it.
-.env.auth.json
-.env.auth.*.json
 # Synthesized ADC creds for firebase-tools, written/cleaned by
 # cmd-deploy.mjs on each deploy. Same refresh token as the cred file.
 .adc.json
