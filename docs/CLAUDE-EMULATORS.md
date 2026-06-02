@@ -10,19 +10,32 @@ The local project id is `demo-not-required` — a Firebase emulator convention, 
 
 Always use the npm scripts, never direct `firebase` commands:
 
-- Start emulators: `npm run start:emulators` — logs go to `/tmp/firebase-emulator.log`
-- Start client: `npm run start:client` (SvelteKit dev server, port 5173)
+- Emulators: `npm run start:emulators` — logs to `/tmp/firebase-emulator.log`
+- Client: `npm run start:client` (SvelteKit dev server, port 5173)
 
-On first browser interaction in a conversation, check whether emulators and dev server are up. Start whichever is down — in parallel, in the background.
+**Detect and reuse first.** On first browser interaction in a conversation, check the ports and start only what's down — never restart something already running:
 
 ```sh
-lsof -i :4000 >/dev/null 2>&1 && echo "emulators running"
+lsof -i :4400 >/dev/null 2>&1 && echo "emulators running"
 lsof -i :5173 >/dev/null 2>&1 && echo "dev server running"
 ```
 
-Stop emulators: `lsof -ti :4400 | xargs kill` (the hub gracefully shuts down all children).
+Best case is the user running the suite in their own terminal — then you only ever detect-and-reuse and never start it yourself.
+
+**If you do start them, start DETACHED — never as a tracked `run_in_background` task.** A background task is owned by the Claude session and gets **hard-killed** (SIGKILL, no cleanup) on teardown — session end, context compaction, and a `/remote-control` connect have all done this. A hard kill skips `--export-on-exit`, so all seeded/emulator data is lost. Detaching reparents the process to the OS (`launchd`/init) so it survives every one of those:
+
+```sh
+nohup npm run start:emulators >/tmp/firebase-emulator.log 2>&1 </dev/null &
+nohup npm run start:client    >/tmp/vite.log              2>&1 </dev/null &
+```
+
+Then poll the log / ports for readiness — a detached process sends no task notifications.
+
+Stop emulators: `lsof -ti :4400 | xargs kill` — a plain SIGTERM to the hub, which **gracefully** shuts down every child and fires `--export-on-exit` (state saved, re-imported next start). This graceful hub stop is the ONLY exit that persists data; never `kill -9` it.
 Stop dev server: `lsof -ti :5173 | xargs kill`.
 Verify shutdown: `lsof -i :4000 -i :4400 -i :9099 -i :5001 -i :8080 -i :9199 >/dev/null 2>&1 || echo "all stopped"`.
+
+**Persistence is graceful-exit only.** Data round-trips via `--export-on-exit=emulator-data` / `--import=emulator-data`, but the export fires *only* on the graceful hub SIGTERM above. If the suite was hard-killed (background reap, crash) it comes up empty — the users whitelist re-seeds automatically on start; re-run any project content seed to repopulate.
 
 ---
 
