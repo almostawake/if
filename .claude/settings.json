@@ -6,11 +6,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hook-block-direct-auth.mjs"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hook-block-direct-auth.mjs\""
           },
           {
             "type": "command",
-            "command": "node .claude/hook-block-chrome-direct.mjs"
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hook-block-chrome-direct.mjs\""
           }
         ]
       }
