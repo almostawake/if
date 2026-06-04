@@ -144,14 +144,6 @@ router.get('/oauth/callback', async (req: Request, res: Response) => {
   if (!email) { res.status(400).type('html').send(messagePage('Sign-in incomplete', 'No email was attached to your Google identity token. Try again from <a href="/consent">/consent</a>.')); return; }
 
   const db = getFirestore();
-  const userDoc = await db.doc(`users/${email}`).get();
-  if (!userDoc.exists) {
-    res.status(403).type('html').send(messagePage(
-      'Access not granted',
-      `<strong>${htmlEscape(email)}</strong> is not on the user whitelist. Ask the project owner to add you first.`,
-    ));
-    return;
-  }
 
   const grant = grantSchema.parse({
     email,
