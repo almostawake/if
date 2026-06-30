@@ -10,6 +10,41 @@
 
   onMount(async () => {
     const href = window.location.href;
+
+    // The project's magic-link callbackUri is a single fixed host, but the
+    // user may have started sign-in on a different connected domain (e.g. a
+    // custom domain vs the <project>.web.app default). The session — and the
+    // pending-email in localStorage — must be created on the origin they
+    // started from, which Firebase preserved in the link's `continueUrl`.
+    // When the link opens on a different origin, forward the one-time code to
+    // that origin's /auth/action and let it finish sign-in. Guard to https +
+    // our own /auth/action path so the code is never bounced to an unrelated
+    // page. (The oobCode is only ever delivered to the recipient's own inbox,
+    // so this is not a secret-leak vector; the guard is defence-in-depth.)
+    const current = new URL(href);
+    const continueUrl = current.searchParams.get('continueUrl');
+    if (continueUrl) {
+      let target: URL | null = null;
+      try {
+        target = new URL(continueUrl);
+      } catch {
+        target = null;
+      }
+      if (
+        target &&
+        target.origin !== current.origin &&
+        target.protocol === 'https:' &&
+        target.pathname === '/auth/action'
+      ) {
+        const dest = target;
+        current.searchParams.forEach((value, key) => {
+          if (key !== 'continueUrl') dest.searchParams.set(key, value);
+        });
+        window.location.replace(dest.toString());
+        return;
+      }
+    }
+
     if (!AuthService.isLink(href)) {
       status = 'error';
       error = "this doesn't look like a sign-in link.";
