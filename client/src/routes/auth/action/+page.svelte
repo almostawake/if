@@ -11,6 +11,8 @@
   onMount(async () => {
     const href = window.location.href;
 
+    // See docs/CLAUDE-AUTH.md for the auth-vs-domains model (authDomain vs
+    // callbackUri vs continueUrl).
     // The project's magic-link callbackUri is a single fixed host, but the
     // user may have started sign-in on a different connected domain (e.g. a
     // custom domain vs the <project>.web.app default). The session — and the

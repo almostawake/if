@@ -1,0 +1,82 @@
+# Auth & domains — how email-link sign-in maps to URLs
+
+Sign-in is **Firebase Auth Email Link** (magic link); no passwords, no OAuth.
+Three independent URL "knobs" decide which domain each part of the flow uses.
+They are easy to confuse, and confusing them burns a whole session chasing the
+wrong layer. This file is the map.
+
+## The three knobs
+
+| Knob | Where it's set | Controls | Does **not** control |
+|---|---|---|---|
+| **`authDomain`** | Client SDK config — `client/src/lib/firebase/init.ts`, computed from `window.location.host` at runtime | Firebase's OAuth popup/redirect surfaces (`/__/auth/handler`, `/__/auth/iframe`) | The email magic-link host. **Email-link sign-in never reads `authDomain`.** |
+| **`callbackUri`** | **Server-side** Identity Platform project config (`notification.sendEmail.callbackUri`) — *not in the repo* | The **host of the link in the email** (`https://<callbackUri-host>/auth/action?…`) | Where sign-in finally completes (that's `continueUrl`) |
+| **`continueUrl`** | Per request at send time = `window.location.origin + '/auth/action'` (`AuthService.sendLink`) | The origin the user **started on**; carried inside the link as a query param | The link's host (that's `callbackUri`) |
+
+**The trap:** `authDomain` is *not* the magic-link host. The host is
+`callbackUri`, which lives only in server-side project config. If a magic link
+points at the wrong domain, editing `authDomain` or `VITE_FIREBASE_AUTH_DOMAIN`
+changes **nothing** — wrong layer.
+
+Why `authDomain` is set to `window.location.host` anyway: purely so that *if*
+an OAuth provider is ever added it works same-origin. With email-link only,
+`authDomain`'s value is irrelevant.
+
+## The lifecycle
+
+1. **Send** — `AuthService.sendLink`, running on whatever domain the user is
+   on: sets `continueUrl = window.location.origin/auth/action`, saves the email
+   in *that origin's* `localStorage`, calls `sendSignInLinkToEmail`.
+2. **Email** — Firebase sends a link to the **fixed `callbackUri` host**, with
+   `continueUrl` ridden along as a query param:
+   `https://<callbackUri-host>/auth/action?mode=signIn&oobCode=…&continueUrl=https://<start-origin>/auth/action`
+3. **Click → forward** — `routes/auth/action/+page.svelte` opens on the
+   callbackUri host. If `continueUrl`'s origin differs, it copies the one-time
+   params onto `continueUrl` and `window.location.replace`s there, so
+   completion happens on the origin the user started from (where their
+   `localStorage` email is). Guarded to `https:` + an `/auth/action` path so the
+   code is never bounced to an unrelated page.
+4. **Complete** — on the start origin, `completeEmailLink` reads the pending
+   email from `localStorage` and calls `signInWithEmailLink`.
+
+Because `continueUrl` is captured from `window.location.origin` at send time,
+the flow works from **any** connected domain with no per-domain config — the
+fixed `callbackUri` is just a transparent hop.
+
+**Caveat:** completion needs the link opened in the same browser that requested
+it (the pending email is in `localStorage`). Cross-device falls through to the
+"confirm your email" prompt — by design.
+
+Sessions are **per origin** (localStorage/IndexedDB): a session on
+`<project>.web.app` does not carry to a custom domain. Users sign in once per
+origin.
+
+## Adding a sign-in domain
+
+To let users sign in on a new domain (e.g. a custom domain):
+
+1. **Connect it in Firebase Hosting** (custom domain, cert provisioned) so it
+   serves `/auth/action` and the reserved `/__/*` paths.
+2. **Add it to Auth → Authorised domains** (Console).
+
+That's all — the step-3 forwarding handles the rest, and `callbackUri` can stay
+on any one connected host. You generally do **not** touch `callbackUri`.
+
+If you ever need the email link to *display* a specific host, that — and only
+that — is the lever, set server-side:
+
+```sh
+# read the current value
+TOKEN=$(node cmd-auth.mjs --token)
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://identitytoolkit.googleapis.com/admin/v2/projects/<PID>/config" \
+  | jq .notification.sendEmail.callbackUri
+# change it: Console → Authentication → Templates → (edit a template) → Customise action URL
+#   or: PATCH …/config?updateMask=notification.sendEmail.callbackUri
+```
+
+## Don't
+
+- Don't "fix the email-link domain" via `authDomain` / `VITE_FIREBASE_AUTH_DOMAIN` — wrong layer; the lever is `callbackUri`.
+- Don't add password or OAuth providers without asking — email-link is deliberate.
+- Don't expect a session on one origin to carry to another — auth state is per-origin.

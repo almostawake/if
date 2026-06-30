@@ -9,6 +9,7 @@ Read the relevant topic file before working in its area:
 - **docs/CLAUDE-SVELTE.md** — Svelte 5 rune conventions. Read before writing any Svelte code.
 - **docs/CLAUDE-API.md** — inbound HTTP API conventions. Read before adding any HTTP endpoint (webhook, server-to-server, etc.).
 - **docs/CLAUDE-EMULATORS.md** — Firebase emulator & dev-server operations. Read before starting/stopping emulators, seeding data, or driving the app in a browser.
+- **docs/CLAUDE-AUTH.md** — how email-link sign-in maps to domains (`authDomain` vs `callbackUri` vs `continueUrl`, the `/auth/action` forwarding, adding a sign-in domain). Read before touching anything to do with sign-in URLs/domains — it's the one place that says which knob actually controls the magic-link host (spoiler: not `authDomain`).
 
 ## Non-technical Audience
 
@@ -33,7 +34,9 @@ The template has **two groups**, and only one of them signs in:
 
 **On the Firebase Web "API key" (`AIzaSy…`) in `client/.env`:** it's a misnamed *public project identifier*, not a credential — see [Firebase docs](https://firebase.google.com/docs/projects/api-keys). Safe to ship in the bundle. Real auth is Firebase Auth ID tokens + Firestore security rules. The file holds project-specific Firebase Web config (`VITE_FIREBASE_*`); seed it from your project's Firebase console (or the bootstrap of your choice) before deploying. Gitignored — never commit.
 
-**`signInWithRedirect` gotcha (if you ever add a redirect-based provider):** breaks in Chrome under third-party cookie restrictions. Fix in the prod Firebase config: `authDomain = window.location.host` (same-origin redirect) + call `getRedirectResult(auth)` on init. Otherwise users land back on the login screen after selecting their account.
+**Magic-link domains:** which domain the email link uses, and how sign-in lands on the right origin, is its own topic — see **docs/CLAUDE-AUTH.md**. Short version: `authDomain` (the SDK config) does **not** control the magic-link host; the server-side `callbackUri` does, and `/auth/action` forwards to wherever the user started. Don't try to fix link-domain issues by editing `authDomain`/`VITE_FIREBASE_AUTH_DOMAIN`.
+
+**`signInWithRedirect` gotcha (if you ever add a redirect-based provider):** breaks in Chrome under third-party cookie restrictions. `authDomain` is already set to `window.location.host` (same-origin redirect — see `client/src/lib/firebase/init.ts`); you'd also need to call `getRedirectResult(auth)` on init. Otherwise users land back on the login screen after selecting their account.
 
 ### 2. Owner/admin Google OAuth — `cmd-auth.mjs` → `~/.if/creds/google.<email>.json`
 
