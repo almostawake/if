@@ -15,7 +15,17 @@ import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase
 // namespace and admin reads 403 against an empty `users` collection.
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? 'demo-key',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? 'demo-not-required.web.app',
+  // authDomain is the host that serves the Firebase Auth helper (/__/auth/*),
+  // and therefore the host baked into every email magic-link. Set it to the
+  // *current* host at runtime so the link always matches the URL the user is
+  // signing in from — every Firebase-Hosting-connected + Auth-authorised
+  // domain serves the handler same-origin, so no rebuild-per-domain is needed.
+  // `window` is undefined during prerender and the auth emulator ignores
+  // authDomain in DEV, so both fall back to the build-time env var.
+  authDomain:
+    !import.meta.env.DEV && typeof window !== 'undefined'
+      ? window.location.host
+      : (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? 'demo-not-required.web.app'),
   projectId: import.meta.env.DEV
     ? 'demo-not-required'
     : (import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'demo-not-required'),
