@@ -14,6 +14,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hook-remind-update-docs.mjs\""
+          }
+        ]
+      }
     ]
   }
 }

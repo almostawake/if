@@ -6,7 +6,7 @@ service cloud.firestore {
     // /admin". A user can read or mutate this list iff their own email
     // is already on it (users manage users — there is no separate
     // admin tier). End users at `/` are anonymous and never touch this
-    // collection (see CLAUDE.md "Auth & deploy → flow 1").
+    // collection (see docs/CLAUDE-AUTH.md).
     //
     // Bootstrap: the provisioner seeds the project owner's email at
     // first deploy so they can use the app on day one. If the list is
