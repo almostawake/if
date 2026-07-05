@@ -12,7 +12,7 @@
 
   // /login is for admins only. If an already-signed-in admin lands
   // here, bounce them straight to /admin (the only thing they sign in
-  // for in this template).
+  // for in this app).
   $effect(() => {
     if (authStore.loaded && authStore.user && authStore.isAdmin === true) {
       goto('/admin', { replaceState: true });

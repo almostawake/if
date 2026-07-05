@@ -79,8 +79,8 @@ function client(): OAuth2Client {
 }
 
 // Friendly placeholder mirroring /'s "ah, one day a home page here." — shown
-// when the template's been cloned but the OAuth client deets aren't filled in
-// yet. Styling is hand-copied from the SvelteKit side (app.css @theme +
+// when the OAuth client deets aren't filled in yet. Styling is hand-copied
+// from the SvelteKit side (app.css @theme +
 // app.html font link) because this function isn't part of the Tailwind build:
 // JetBrains Mono 18px/1.45, #999 faint text on white, centred in the viewport
 // with the same px-6 gutter. Keep in sync with client/src/routes/+page.svelte.

@@ -30,10 +30,6 @@ Three surfaces:
 | Sign-in, magic-link URLs/domains, whitelist | **docs/CLAUDE-AUTH.md** — the one place that says which knob controls the magic-link host (spoiler: not `authDomain`) |
 | Deploying, Google API tokens, credentials | **docs/CLAUDE-DEPLOY.md** |
 
-## Patterns live as skills
-
-`.claude/skills/` holds blessed implementations of whole capabilities. The split: **topic docs say how code is written in an area; skills fire when the user asks for a capability** ("scrape this site", "store documents", "use AI to sort these"). Before designing a capability from scratch, check whether a skill already covers it. When work here produces a reusable capability pattern, suggest capturing it as a skill.
-
 ## Non-technical audience
 
 The user is a non-developer — a business analyst, project manager, or team lead building small personal-automation tools with Claude Code. Assume they do not know OAuth, serverless, or Firestore modelling; keep jargon to a minimum and offer to explain. When they ask for specific technology, clarify the functional requirement first rather than taking the technical direction at face value.
@@ -59,7 +55,7 @@ The user is a non-developer — a business analyst, project manager, or team lea
 ## Test UI changes
 
 - Test significant UI changes before completing your turn. Use screenshots to verify layout/alignment.
-- Drive the browser via **chrome-devtools MCP only** (configured at user scope; installed by `aa/n` for new users). Conventions live in your personal `~/.claude/CLAUDE.md`.
+- Drive the browser via **chrome-devtools MCP only** (configured at user scope). Conventions live in your personal `~/.claude/CLAUDE.md`.
 - Make → verify → fix → verify — this tight loop catches bugs that code review alone misses.
 
 ## General

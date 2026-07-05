@@ -12,9 +12,9 @@
 // always present and current, and nothing fake is ever committed.
 //
 // Source of truth: THIS_PROJECT_REGION_ON_GOOGLE_HOSTING in root .env — the
-// immutable region of the project's Firestore database, written by `n` at
-// provisioning. Same trust model as THIS_PROJECT_ID_ON_GOOGLE_HOSTING: .env
-// is the local record of what the project was provisioned as.
+// immutable region of the project's Firestore database, recorded there at
+// project creation. Same trust model as THIS_PROJECT_ID_ON_GOOGLE_HOSTING:
+// .env is the local record of what the project was created as.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -53,8 +53,8 @@ if (!region) {
   console.error(
     'error: THIS_PROJECT_REGION_ON_GOOGLE_HOSTING not set in .env\n' +
     '       The functions build needs it to set the deploy region. It is the\n' +
-    "       immutable region of the project's Firestore database — `n` writes\n" +
-    '       it at provisioning. If .env is missing it, add it by hand\n' +
+    "       immutable region of the project's Firestore database — recorded\n" +
+    '       at project creation. If .env is missing it, add it by hand\n' +
     '       (see docs/CLAUDE-STACK.md → Region).',
   );
   process.exit(2);

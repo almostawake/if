@@ -74,13 +74,13 @@ Still one deploy unit, one Cloud Run service, one cold-start. **Never** add a se
 
 ## Env vars
 
-`functions/.env` carries the bearer secret. Firebase Functions Gen 2 auto-loads it both in the emulator and in deployed functions. Gitignored. Seeded by the install script (or copy `functions/.env.example` to `functions/.env` and fill it in by hand).
+`functions/.env` carries the bearer secret. Firebase Functions Gen 2 auto-loads it both in the emulator and in deployed functions. Gitignored; created at project setup.
 
 The same secret is used by the emulator — calls in local dev need the bearer too, for parity.
 
 ## Region
 
-Functions deploy to whatever region the project's Firestore database lives in. That region is **immutable** — chosen once at project creation by the new-project script (`../aa/n`; default `australia-southeast1`, override with `n --region <id>`). `cmd-deploy.mjs` looks it up and injects it as `FIREBASE_REGION`, which `setGlobalOptions` reads at the top of `functions/src/index.ts`. No hardcoded region to drift, and functions always sit with their data. Don't override per-function — keeping everything in one region avoids cross-region latency and egress.
+Functions deploy to whatever region the project's Firestore database lives in. That region is **immutable** — chosen once at project creation (default `australia-southeast1`). `cmd-deploy.mjs` looks it up and injects it as `FIREBASE_REGION`, which `setGlobalOptions` reads at the top of `functions/src/index.ts`. No hardcoded region to drift, and functions always sit with their data. Don't override per-function — keeping everything in one region avoids cross-region latency and egress.
 
 ## Where it's reachable
 

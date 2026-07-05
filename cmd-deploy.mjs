@@ -98,7 +98,7 @@ fs.writeFileSync(
 // so the post-deploy "no cleanup policy detected" error doesn't fail
 // the run, and skips confirmation prompts (orphan-function deletion,
 // minInstances cost-bump confirms, unsafe trigger migrations) that
-// aren't useful for this template's solo-dev flow.
+// aren't useful for this project's solo-dev flow.
 const passthrough = process.argv.slice(2);
 const args = ['firebase', 'deploy', '--project', project, '--force', ...passthrough];
 console.log(`deploy: project=${project} account=${account} → npx ${args.join(' ')}`);

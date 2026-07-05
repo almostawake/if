@@ -2,7 +2,7 @@
 //
 // PreToolUse hook for Bash. Blocks direct invocations of firebase /
 // firebase-tools / gcloud login commands so they don't shadow this
-// template's auth flow (npm run auth → cmd-auth.mjs → ~/.if/creds/).
+// project's auth flow (npm run auth → cmd-auth.mjs → ~/.if/creds/).
 //
 // Allowed: firebase emulators:*, firebase deploy (called by the
 // `npm run deploy*` wrapper), gcloud auth list / print-access-token /
@@ -23,7 +23,7 @@ const BLOCKED = /(firebase|firebase-tools)\s+login|gcloud\s+auth\s+(application-
 
 if (BLOCKED.test(cmd)) {
   console.error(
-    "Blocked: this template manages Google OAuth itself " +
+    "Blocked: this project manages Google OAuth itself " +
     "(creds at ~/.if/creds/google.<email>.json). Run 'npm run auth' " +
     "instead (uses EMAIL_OF_GOOGLE_HOSTING_ACCOUNT from .env), or 'npm run auth -- <email>' " +
     "for a non-default account. firebase emulators and 'npm run deploy*' " +

@@ -15,7 +15,7 @@
 // canonical zod schema). This script can't import that file directly —
 // it's a standalone .mjs invoked before any TS build — so the field
 // shape below is a deliberate duplicate. If you change User.ts, mirror
-// the change here (and in aa/n's _seed_users provisioning step).
+// the change here.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

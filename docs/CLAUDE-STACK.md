@@ -24,7 +24,7 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | LLM | **Gemini API** (via a Cloud Function that holds the key) | Single LLM SDK across the stack. Key lives server-side. Costs are real — no free tier to hide behind. |
 | Scraping (simple) | `fetch` from a Cloud Function | CORS-safe, no dependencies, use whenever a plain HTTP body is enough. |
 | Scraping (protected sites) | **Puppeteer + `puppeteer-extra-plugin-stealth`** on Cloud Functions | Bullet-proof against the 99% of sites guarded by CF-style bot detection. Cloud Run is the documented escalation for the 1% that need heavier setup. |
-| Email (outbound) | **Gmail API**, sending from the user's own Gmail account | Avoids Resend/SendGrid account setup. Provisioned during first-run setup. |
+| Email (outbound) | **Gmail API**, sending from the user's own Gmail account | Avoids Resend/SendGrid account setup. |
 | Notifications (push to phone) | **Ntfy** (`ntfy.sh`) | Zero-account, free, one `fetch` call. Topic lives in `functions/.env`. |
 | Local dev | **Firebase emulator suite** | Free local emulation is a hard requirement — see ../CLAUDE.md. |
 | Lint/format | **ESLint + Prettier + svelte-check** | `npm run check` = `svelte-check && eslint .` |
@@ -35,8 +35,8 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 
 Every Firebase resource for a project lives in **one region**, chosen once when the project is created:
 
-- **Firestore** and the **default Storage bucket** — provisioned by the new-project script (`../aa/n`). Default `australia-southeast1` (Sydney); override at creation with `n --region <id>` (single regions only — Functions can't live in a multi-region like `nam5`). **Immutable** once set.
-- **Cloud Functions** (and the Cloud Run services + Artifact Registry repos they spawn) — deploy to that same region automatically. `n` records the region in `.env` as `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`; the functions build generates `functions/src/region.ts` from it (`cmd-region.mjs`), and `setGlobalOptions` reads it in `functions/src/index.ts`. It's baked into source rather than passed as an env var because firebase-tools runs functions discovery in a subprocess with a fixed, minimal env that user values never reach. `region.ts` is gitignored and regenerated on every build.
+- **Firestore** and the **default Storage bucket** — created with the project. Default `australia-southeast1` (Sydney); single regions only — Functions can't live in a multi-region like `nam5`. **Immutable** once set.
+- **Cloud Functions** (and the Cloud Run services + Artifact Registry repos they spawn) — deploy to that same region automatically. The region is recorded in `.env` as `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`; the functions build generates `functions/src/region.ts` from it (`cmd-region.mjs`), and `setGlobalOptions` reads it in `functions/src/index.ts`. It's baked into source rather than passed as an env var because firebase-tools runs functions discovery in a subprocess with a fixed, minimal env that user values never reach. `region.ts` is gitignored and regenerated on every build.
 
 Functions always sit with their data — no cross-region latency or egress. Don't override per-function; if you genuinely need a function elsewhere, set `region` on that specific `onRequest` / `onCall`, not on `setGlobalOptions`.
 
@@ -48,7 +48,7 @@ Functions always sit with their data — no cross-region latency or egress. Don'
 
 Why not the obvious-looking `match /foo/{x} { allow read: if request.auth != null && firestore.exists(...) }`: cross-service Storage→Firestore rules silently 403 in production with no actionable error. We've burned a day on this; not doing it again. Putting the access decision in TypeScript means it's testable, greppable, and the failure mode is a typed exception, not an empty `<audio>` element.
 
-**Project setup `n` already does for you:** the Cloud Functions runtime service account (`<project-number>-compute@developer.gserviceaccount.com`) is granted `roles/iam.serviceAccountTokenCreator` on **itself**. Without this, `file.getSignedUrl()` 500s in the runtime — there's no SA private key locally, so signing falls back to the IAM Credentials API, which requires self-impersonation. The binding is provisioned by `aa/n`'s `grant_token_creator` row on every project; do not remove it. If signing ever 500s on a project you didn't provision via `n`, this is the missing piece.
+**Project-level IAM this relies on:** the Cloud Functions runtime service account (`<project-number>-compute@developer.gserviceaccount.com`) is granted `roles/iam.serviceAccountTokenCreator` on **itself** — set at project creation; do not remove it. Without this, `file.getSignedUrl()` 500s in the runtime — there's no SA private key locally, so signing falls back to the IAM Credentials API, which requires self-impersonation. If signing ever 500s, this binding is the missing piece.
 
 **Pattern for a new private-Storage feature:**
 

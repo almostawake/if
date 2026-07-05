@@ -66,7 +66,7 @@
 //
 // OAuth client: gcloud's public installed-app (client_id 32555940559).
 // Identical client to `gcloud auth login`. cloud-platform scope covers
-// every Firebase + GCP REST API this template uses.
+// every Firebase + GCP REST API this project uses.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -85,7 +85,7 @@ const BROWSER_TIMEOUT_MS = 300_000;
 const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const CREDS_DIR = path.join(os.homedir(), '.if', 'creds');
 // Central, machine-wide if config (project parent, default account).
-// Same file aa/n seeds + sources; we read it as the account fallback.
+// We read it as the account fallback.
 const IF_ENV = path.join(os.homedir(), '.if', '.env');
 const USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -484,7 +484,7 @@ if (isMain) {
 
   // Discovery mode: no account known up front. Run the OAuth flow, read
   // userinfo.email, write the cred file using that email, print the email
-  // to stdout. Used by aa/n for first-time sign-in where the account is
+  // to stdout. Used for first-time sign-in where the account is
   // whatever the user chooses in the browser. Mutex with everything else.
   if (discover) {
     if (arg) {

@@ -5,8 +5,7 @@
 // orphan profile (typically /tmp/chrome-mcp-profile) that loses
 // signed-in state and that chrome-devtools MCP can't reuse.
 //
-// The launcher (installed by `aa/n` at
-// ~/Applications/Chrome with Claude Code.app) is the single source of
+// The launcher (~/Applications/Chrome with Claude Code.app) is the single source of
 // truth for port 9222 + the Chrome-Claude profile. Use it via:
 //
 //   open -a "Chrome with Claude Code"
@@ -28,8 +27,8 @@ const HAS_LAUNCH_FLAG = /--remote-debugging-port|--user-data-dir/.test(cmd);
 if (HAS_BINARY && HAS_LAUNCH_FLAG) {
   console.error(
     "Blocked: don't spawn Chrome by path with --remote-debugging-port. " +
-    "Use `open -a \"Chrome with Claude Code\"` — the launcher (installed by " +
-    "aa/n at ~/Applications/) handles port 9222 and the Chrome-Claude profile " +
+    "Use `open -a \"Chrome with Claude Code\"` — the launcher (in " +
+    "~/Applications/) handles port 9222 and the Chrome-Claude profile " +
     "that chrome-devtools MCP attaches to. Direct spawns create an orphan " +
     "profile MCP can't reuse and lose signed-in state."
   );

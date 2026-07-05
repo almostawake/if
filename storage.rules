@@ -13,8 +13,8 @@ service firebase.storage {
     // reasons, with no actionable error. Keeping the access decision in
     // a callable means it's testable TypeScript, not untestable rule DSL.
     //
-    // What this needs at the project level (already provisioned by `n` —
-    // see ../aa/n's `grant_token_creator`): the Cloud Functions runtime
+    // What this needs at the project level (set up at project
+    // creation): the Cloud Functions runtime
     // service account holds `roles/iam.serviceAccountTokenCreator` on
     // itself. Without that, `file.getSignedUrl()` 500s in the runtime
     // (it has no SA private key locally; it signs via the IAM Credentials

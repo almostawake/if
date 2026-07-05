@@ -8,8 +8,8 @@ service cloud.firestore {
     // admin tier). End users at `/` are anonymous and never touch this
     // collection (see docs/CLAUDE-AUTH.md).
     //
-    // Bootstrap: the provisioner seeds the project owner's email at
-    // first deploy so they can use the app on day one. If the list is
+    // Bootstrap: the project owner's email is seeded at project
+    // creation so they can use the app on day one. If the list is
     // ever emptied (everyone removes everyone), recovery requires
     // out-of-band access (Firebase Console or Admin SDK).
     match /users/{emailDocId} {
