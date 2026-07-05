@@ -37,7 +37,7 @@ The user is a non-developer — a business analyst, project manager, or team lea
 ## Hard rules
 
 - Google access tokens come from `node cmd-auth.mjs --token` only. Never read `~/.if/creds/*` files directly, never hand-roll a token refresh, never `gcloud auth login` / `firebase login` (hook-blocked). Details: docs/CLAUDE-DEPLOY.md.
-- Don't add sign-in providers (OAuth, passwords) without asking — email-link + whitelist is deliberate. Point users to docs/CLAUDE-AUTH.md if they ask for "logins".
+- Don't add sign-in providers (OAuth, passwords, Firebase Anonymous auth) without asking — email-link + whitelist is deliberate, and anonymous visitors having no data path is too (docs/CLAUDE-AUTH.md). Point users to docs/CLAUDE-AUTH.md if they ask for "logins".
 - Two unrelated bearer tokens exist: the **outbound** Google OAuth token (above) and the **inbound** `api` bouncer secret (`CODE_THAT_OTHER_SERVICES_NEED_TO_GET_PAST_OUR_BOUNCER` in `functions/.env`). Different files, different lifetimes — never mix them.
 - Don't deploy unless the user explicitly asks.
 

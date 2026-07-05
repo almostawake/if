@@ -5,13 +5,15 @@
 Two groups of people use this app; only one of them signs in:
 
 - **End users at `/`** (and any other non-`/admin/*` route): **anonymous**. No sign-in, no Firestore writes from them. Features live here. Don't gate `/` and don't add a login flow there unless explicitly asked — public-by-default is the chosen shape.
+
+  "Anonymous" means **no Firebase Auth session of any kind** — Firebase's Anonymous Authentication provider (`signInAnonymously()`) counts as a sign-in provider and is equally off-limits. Anonymous visitors also have **no data path, deliberately**: Firestore rules default-deny them, the `api` function is bearer-gated, and callables/Storage serve whitelisted users only. This is not a gap to fill — if a feature at `/` needs to store or fetch per-visitor data, stop and ask the user rather than inventing a path (no anonymous auth, no public rules, no additions to the api no-bearer allowlist). A proper anonymous-data pattern may be added later.
 - **Signed-in users at `/admin/*`**: sign in via **Firebase Auth Email Link**, gated by the `users` collection in Firestore (doc id = lowercased email). Flow: enter email → magic link by email → click → signed in iff `request.auth.token.email.lower()` exists in `/users/{email}`. Magic-link only — no passwords, no OAuth.
 
 `/admin` is the management surface for the app itself (today: the user whitelist; later: scopes, integrations, etc.). End users never visit it. There is no separate "admin" tier — anyone in `users` can sign in to `/admin` and edit the list (users manage users). The doc id is email, not Firebase uid, because email is the only stable identifier we have at invite time (the uid doesn't exist until first sign-in).
 
 **Bootstrap:** the project owner's email must exist in `/users/{lowercased-email}` before first sign-in. The emulator auto-seeds the owner via `cmd-seed-user.mjs` on `npm run start:emulators`; prod needs a one-time manual seed at first deploy. If the list is ever emptied (everyone removes everyone), recovery requires out-of-band access (Firebase Console / Admin SDK).
 
-**Don't add Google OAuth, password auth, or other sign-in providers without asking.** Email Link is the chosen pattern: zero passwords, no consent-screen setup, easy to administrate. Point users here if they ask for "logins".
+**Don't add Google OAuth, password auth, anonymous auth, or other sign-in providers without asking.** Email Link is the chosen pattern: zero passwords, no consent-screen setup, easy to administrate. Point users here if they ask for "logins".
 
 **On the Firebase Web "API key" (`AIzaSy…`) in `client/.env`:** it's a misnamed *public project identifier*, not a credential — see [Firebase docs](https://firebase.google.com/docs/projects/api-keys). Safe to ship in the bundle. Real auth is Firebase Auth ID tokens + Firestore security rules. The file holds project-specific Firebase Web config (`VITE_FIREBASE_*`); seed it from your project's Firebase console (or the bootstrap of your choice) before deploying. Gitignored — never commit.
 
