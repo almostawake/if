@@ -44,7 +44,9 @@ Functions always sit with their data — no cross-region latency or egress. Don'
 
 ## Google APIs already enabled
 
-Project creation enables these (all `*.googleapis.com`) — treat them as available, never as something the user must turn on:
+The project is **linked to a billing account at creation** — paid services (Functions Gen 2, Cloud Run, Vertex AI) already work. Never treat billing setup or a plan upgrade as a blocker; do flag features likely to carry real spend before building them.
+
+Project creation also enables these APIs (all `*.googleapis.com`) — treat them as available, never as something the user must turn on:
 
 - **Firebase core** — `firebase`, `firestore`, `storage` + `firebasestorage`, `identitytoolkit` (Auth), `firebasehosting`
 - **Functions deploy/runtime chain** — `cloudfunctions`, `cloudbuild`, `run`, `artifactregistry`, `eventarc`, `pubsub`
