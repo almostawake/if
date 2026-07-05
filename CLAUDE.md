@@ -26,7 +26,7 @@ Three surfaces:
 | Writing any Svelte code | **docs/CLAUDE-SVELTE.md** — Svelte 5 rune conventions |
 | Firestore data / schemas | **docs/CLAUDE-STACK.md** § Data model conventions |
 | Any inbound HTTP endpoint (webhook, server-to-server) | **docs/CLAUDE-API.md** |
-| Emulators, dev server, seeding, driving the app in a browser | **docs/CLAUDE-EMULATORS.md** |
+| Running the app on this machine — any request to start, stop, restart, or check it, however worded ("run it up", "shut it down", "is it running?", "the servers", "local", "here") — plus seeding data and driving the app in a browser | **docs/CLAUDE-EMULATORS.md** |
 | Sign-in, magic-link URLs/domains, whitelist | **docs/CLAUDE-AUTH.md** — the one place that says which knob controls the magic-link host (spoiler: not `authDomain`) |
 | Deploying, Google API tokens, credentials | **docs/CLAUDE-DEPLOY.md** |
 

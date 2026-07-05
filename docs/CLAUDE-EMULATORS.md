@@ -2,6 +2,8 @@
 
 Read this before starting/stopping the local emulator suite, seeding data, or driving the app in a browser session. The companion doc is `../CLAUDE.md` for the broader project rules.
 
+**Interpreting requests:** the user is a non-developer and will never say "emulators" or "dev server". Treat any request to get the app going, look at it, stop it, restart it, or check on it — in whatever words ("run it up", "spin it up", "shut it all down", "are the servers up?", "open it here") — as being about the two local processes below, and about *both* of them unless one is singled out. If it's ambiguous whether they mean local or the live hosted site, assume local: the hosted site only ever changes on an explicit deploy.
+
 The local project id is `demo-not-required` — a Firebase emulator convention, not a real project. Do NOT `firebase use` it. Free local emulation is a deliberate constraint; do NOT suggest anything that requires a live Firebase project to develop against. Do NOT deploy unless the user explicitly asks.
 
 ---
