@@ -51,7 +51,7 @@ Project creation also enables these APIs (all `*.googleapis.com`) — treat them
 - **Firebase core** — `firebase`, `firestore`, `storage` + `firebasestorage`, `identitytoolkit` (Auth), `firebasehosting`
 - **Functions deploy/runtime chain** — `cloudfunctions`, `cloudbuild`, `run`, `artifactregistry`, `eventarc`, `pubsub`
 - **Scheduled jobs** — `cloudscheduler` (`onSchedule` triggers work with no extra setup)
-- **AI** — `aiplatform` (Vertex AI → Gemini)
+- **AI** — `aiplatform` (Vertex AI → Gemini). The Functions runtime service account already holds `roles/aiplatform.user` — Gemini calls from Functions need no extra IAM.
 - **User-consented data** — `gmail`, `calendar-json` (pairs with the consent flow's default `ADMIN_CONSENTS` scopes)
 - **Plumbing** — `cloudbilling`, `apikeys`
 
