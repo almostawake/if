@@ -42,6 +42,21 @@ Functions always sit with their data — no cross-region latency or egress. Don'
 
 ---
 
+## Google APIs already enabled
+
+Project creation enables these (all `*.googleapis.com`) — treat them as available, never as something the user must turn on:
+
+- **Firebase core** — `firebase`, `firestore`, `storage` + `firebasestorage`, `identitytoolkit` (Auth), `firebasehosting`
+- **Functions deploy/runtime chain** — `cloudfunctions`, `cloudbuild`, `run`, `artifactregistry`, `eventarc`, `pubsub`
+- **Scheduled jobs** — `cloudscheduler` (`onSchedule` triggers work with no extra setup)
+- **AI** — `aiplatform` (Vertex AI → Gemini)
+- **User-consented data** — `gmail`, `calendar-json` (pairs with the consent flow's default `ADMIN_CONSENTS` scopes)
+- **Plumbing** — `cloudbilling`, `apikeys`
+
+Anything not listed (Sheets, Drive, Maps, …) is **not** enabled. Enabling one is part of the feature work, not a user chore: get a token per docs/CLAUDE-DEPLOY.md, `POST https://serviceusage.googleapis.com/v1/projects/<pid>/services/<api>:enable`, and mention to the user that a new Google service was switched on for their project.
+
+---
+
 ## Storage privacy posture
 
 **Cloud Storage is fully private. The client never reads or writes objects directly.** `storage.rules` denies everything. Every read goes through a Cloud Functions callable that authenticates the caller (Firebase Auth ID token), authorises them against the `users` whitelist, and mints a short-lived V4 signed URL that the browser fetches with no token plumbing.
