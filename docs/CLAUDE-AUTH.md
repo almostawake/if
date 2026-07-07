@@ -4,7 +4,7 @@
 
 Two groups of people use this app; only one of them signs in:
 
-- **End users at `/`** (and any other non-`/admin/*` route): **anonymous**. No sign-in, no Firestore writes from them. Features live here. Don't gate `/` and don't add a login flow there unless explicitly asked — public-by-default is the chosen shape.
+- **End users at `/`** (and any other non-`/admin/*` route): **anonymous**. No sign-in required, no Firestore writes from them. Features live here. Don't gate `/` — public-by-default is the chosen shape. The home page's top bar (`AppHeader.svelte`, added at the owner's request) shows a "sign in" link and, for an already-signed-in whitelisted user, the admin menu; this *reads* auth state (so Firebase initializes on `/`) but gates nothing.
 
   "Anonymous" means **no Firebase Auth session of any kind** — Firebase's Anonymous Authentication provider (`signInAnonymously()`) counts as a sign-in provider and is equally off-limits. Anonymous visitors also have **no data path, deliberately**: Firestore rules default-deny them, the `api` function is bearer-gated, and callables/Storage serve whitelisted users only. This is not a gap to fill — if a feature at `/` needs to store or fetch per-visitor data, stop and ask the user rather than inventing a path (no anonymous auth, no public rules, no additions to the api no-bearer allowlist). A proper anonymous-data pattern may be added later.
 - **Signed-in users at `/admin/*`**: sign in via **Firebase Auth Email Link**, gated by the `users` collection in Firestore (doc id = lowercased email). Flow: enter email → magic link by email → click → signed in iff `request.auth.token.email.lower()` exists in `/users/{email}`. Magic-link only — no passwords, no OAuth.

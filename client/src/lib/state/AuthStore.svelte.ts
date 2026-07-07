@@ -5,9 +5,10 @@ import { getFirebase } from '$lib/firebase/init';
 
 // Singleton — constructor subscribes to onAuthStateChanged once, for the
 // rest of the page session. Importing this module is what causes
-// Firebase to initialize, so it's deliberately NOT imported from the
-// root layout: the public `/` route stays Firebase-free. Only routes
-// that actually need auth (/admin, /login) import it.
+// Firebase to initialize. The public `/` page imports it too (via
+// AppHeader, to show sign-in state in the top bar), so Firebase Auth now
+// initializes for anonymous visitors — read-only: they still have no
+// data path (docs/CLAUDE-AUTH.md).
 class AuthStore {
   user = $state<User | null>(null);
   /** null = not yet known, true/false = result of the user-whitelist check. */

@@ -7,11 +7,11 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import type { Snippet } from 'svelte';
+  import AppHeader from '$lib/components/AppHeader.svelte';
   import { authStore } from '$lib/state/AuthStore.svelte';
   import { usersStore } from '$lib/state/UsersStore.svelte';
 
   let { children }: { children: Snippet } = $props();
-  let menuOpen = $state(false);
 
   // Gate for /admin/*. Three states once `loaded` resolves:
   //   no user           → /login
@@ -38,75 +38,11 @@
     usersStore.start();
     return () => usersStore.stop();
   });
-
-  function toggleMenu() {
-    menuOpen = !menuOpen;
-  }
-
-  function closeMenu() {
-    menuOpen = false;
-  }
-
-  async function handleSignOut() {
-    closeMenu();
-    await authStore.signOut();
-    await goto('/login', { replaceState: true });
-  }
 </script>
-
-<svelte:window onclick={(e) => {
-  const target = e.target as HTMLElement;
-  if (!target.closest('[data-menu-root]')) closeMenu();
-}} />
 
 {#if authStore.loaded && authStore.isAdmin === true}
 <div class="flex min-h-screen flex-col">
-  <header class="flex h-16 items-center border-b border-border bg-bg-soft px-3">
-    <div data-menu-root class="relative">
-      <button
-        class="flex h-14 w-14 items-center justify-center rounded hover:bg-bg-hover"
-        onclick={toggleMenu}
-        aria-label="Menu"
-        aria-expanded={menuOpen}
-      >
-        <span aria-hidden="true" class="text-3xl leading-none">≡</span>
-      </button>
-      {#if menuOpen}
-        <!--
-          Single menu item for now. New admin pages (e.g. /admin/scopes)
-          should add themselves here in the same shape — a li with an
-          anchor — so the menu stays the single source of nav truth.
-        -->
-        <nav
-          class="absolute left-0 top-full mt-1 min-w-[180px] border border-border bg-white shadow-sm"
-        >
-          <ul>
-            <li>
-              <a
-                href="/admin"
-                onclick={closeMenu}
-                class="block px-3 py-2 hover:bg-bg-hover"
-              >
-                users
-              </a>
-            </li>
-            <li class="border-t border-border">
-              <button
-                type="button"
-                class="block w-full px-3 py-2 text-left hover:bg-bg-hover"
-                onclick={handleSignOut}
-              >
-                sign out
-              </button>
-            </li>
-          </ul>
-        </nav>
-      {/if}
-    </div>
-    <div class="ml-auto text-[15px] text-fg-faint">
-      {authStore.user?.email ?? ''}
-    </div>
-  </header>
+  <AppHeader />
 
   <!--
     Page-content gutter: pl uses --page-gutter (= the menu icon's visible
