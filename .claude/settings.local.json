@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /tmp/cc-layout-a/.claude)",
+      "Bash(mkdir -p /tmp/cc-layout-b)",
+      "Bash(echo '{\"autoUpdates\": false}')",
+      "Bash(CLAUDE_CONFIG_DIR=/tmp/cc-layout-a claude config get autoUpdates)",
+      "Bash(CLAUDE_CONFIG_DIR=/tmp/cc-layout-b claude config get autoUpdates)",
+      "Bash(rm ~/.claude/hooks/session-colors.log)",
+      "Read(//Users/wombat/.claude/hooks/**)",
+      "Bash(~/.claude/hooks/session-namer.mjs)",
+      "Bash(rm ~/.claude/sessions/99999.json)",
+      "Bash(mv /tmp/scl.tmp ~/.claude/hooks/session-colors.log)"
+    ]
+  },
+  "disabledMcpjsonServers": [
+    "chrome-devtools"
+  ]
+}

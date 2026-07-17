@@ -1,6 +1,6 @@
 # Purpose
 
-Fast-track small automation solutions for non-developers.
+I'm not sure yet, but when we get a feel for it, update these docs and remove this comment! ;)
 
 # Orientation
 
