@@ -40,6 +40,7 @@ The user is a non-developer — a business analyst, project manager, or team lea
 - Don't add sign-in providers (OAuth, passwords, Firebase Anonymous auth) without asking — email-link + whitelist is deliberate, and anonymous visitors having no data path is too (docs/CLAUDE-AUTH.md). Point users to docs/CLAUDE-AUTH.md if they ask for "logins".
 - Two unrelated bearer tokens exist: the **outbound** Google OAuth token (above) and the **inbound** `api` bouncer secret (`CODE_THAT_OTHER_SERVICES_NEED_TO_GET_PAST_OUR_BOUNCER` in `functions/.env`). Different files, different lifetimes — never mix them.
 - Don't deploy unless the user explicitly asks.
+- The Google project comes pre-provisioned: billing linked, key IAM pre-granted, and these APIs enabled (all `*.googleapis.com`): `firebase`, `firestore`, `storage`, `firebasestorage`, `identitytoolkit`, `firebasehosting`, `cloudfunctions`, `cloudbuild`, `run`, `artifactregistry`, `eventarc`, `pubsub`, `cloudscheduler`, `aiplatform` (Vertex AI → Gemini), `gmail`, `calendar-json`, `apikeys`, `cloudbilling`. Never tell the user to enable one of these or upgrade billing. Anything not listed needs enabling first — how: docs/CLAUDE-STACK.md § "Google APIs already enabled".
 
 ## User requirements
 
