@@ -1,27 +1,37 @@
 // ESLint flat config — correctness-focused. Formatting is Prettier's job
 // (eslint-config-prettier switches every stylistic rule off), so anything
 // this file flags is a real code-quality issue, not taste. Tuned for
-// LLM-written code: the enabled extras catch the classic LLM slips —
-// unused imports/vars, loose equality, shadowed names, unhandled
-// promises left floating.
+// LLM-written code: the enabled extras catch the classic slips — unused
+// imports/vars, loose equality, shadowed names — plus the two React
+// mistakes that cause real, hard-to-see bugs (hooks called conditionally,
+// and effects with incomplete dependency arrays).
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
-import svelte from 'eslint-plugin-svelte';
+import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import ts from 'typescript-eslint';
-import svelteConfig from './svelte.config.js';
 
 export default ts.config(
   js.configs.recommended,
   ...ts.configs.recommended,
-  ...svelte.configs.recommended,
+  reactHooks.configs.flat.recommended,
   prettier,
-  ...svelte.configs.prettier,
   {
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
     },
     rules: {
+      // `react-hooks` recommended (enabled above) brings the full React
+      // Compiler rule set — purity, refs, set-state-in-effect and friends.
+      // Keep it: those catch real bugs, and the ported code passes clean.
+      //
+      // These two get promoted from warn to error because they are the
+      // classic React mistakes. `rules-of-hooks` catches a hook behind an
+      // if/early-return, which corrupts hook order and produces nonsense
+      // state. `exhaustive-deps` catches the stale-closure effect, which
+      // silently reads yesterday's value.
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
       // Unused code is the #1 LLM residue. Underscore-prefix to opt out.
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
@@ -35,24 +45,9 @@ export default ts.config(
       '@typescript-eslint/no-shadow': 'error',
       // Leftover debug logging shouldn't ship silently.
       'no-console': ['warn', { allow: ['warn', 'error'] }],
-      // Guards base-path deployments, which this template never uses
-      // (hosting serves at the domain root). Plain goto('/x') and
-      // href="/x" are the intended idiom here.
-      'svelte/no-navigation-without-resolve': 'off',
     },
   },
   {
-    files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
-    languageOptions: {
-      parserOptions: {
-        projectService: true,
-        extraFileExtensions: ['.svelte'],
-        parser: ts.parser,
-        svelteConfig,
-      },
-    },
-  },
-  {
-    ignores: ['.svelte-kit/', 'build/', 'dist/', 'static/'],
+    ignores: ['dist/', 'public/'],
   },
 );

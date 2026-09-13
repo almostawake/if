@@ -1,8 +1,7 @@
 node_modules/
 client/node_modules/
-client/build/
-client/.svelte-kit/
-client/static/*.json
+client/dist/
+client/public/*.json
 functions/node_modules/
 functions/lib/
 # Generated per-build from .env by cmd-region.mjs — bakes the deploy region

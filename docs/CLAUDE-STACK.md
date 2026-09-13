@@ -1,6 +1,6 @@
 # Target Tech Stack
 
-The tech stack and layer patterns for this project. See **../CLAUDE.md** for ways of working, and **CLAUDE-SVELTE.md** for Svelte 5 specifics (read this before writing any Svelte code — LLMs habitually drift to Svelte 4 syntax).
+The tech stack and layer patterns for this project. See **../CLAUDE.md** for ways of working, and **CLAUDE-REACT.md** for the React conventions (read this before writing any client code — the React corpus is twenty years deep and most of it is out of date).
 
 The stack is chosen to maximise **first-shot correctness from LLMs**. That means: conventions that live in the repo rather than a library's docs, APIs that can be grepped, and training-corpus-heavy tools.
 
@@ -11,13 +11,13 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | Layer | Choice | Why |
 |---|---|---|
 | Build tool | **Vite** | Ecosystem standard, fast, matches the reference app. |
-| Framework | **SvelteKit** | File-based routing, layouts, `$lib` alias, SPA adapter. |
-| Language | **Svelte 5 + TypeScript** | Runes (`$state`, `$derived`, `$effect`) — see CLAUDE-SVELTE.md. |
-| Deployment | **`adapter-static` (SPA)** | Pure static output. Deploys to Firebase Hosting identically to the reference app. No SSR — avoids the `if (browser)` dance with the Firebase client SDK. |
+| Framework | **React 19 + TypeScript** | The largest training corpus of any UI framework, which is the whole point — see CLAUDE-REACT.md. |
+| Routing | **React Router v7** (declarative mode) | One route table in `src/router.tsx`, which is also the auth gate. No loaders/actions, no framework mode. |
+| Deployment | **Vite SPA build → `client/dist`** | Pure static output, served by Firebase Hosting with a catch-all rewrite to `/index.html`. No SSR — avoids the `typeof window` dance with the Firebase client SDK. |
 | Styling | **Tailwind CSS** | Utility-first, inline classes = LLM-readable. |
-| Components | **shadcn-svelte** + **bits-ui** | Components are *copied into the repo*, not a dependency. LLMs can grep and read the exact API instead of hallucinating props. |
-| Icons | **lucide-svelte** | De-facto standard, huge set, tree-shakes. |
-| State | **Class-based rune stores** | One class per domain, `$state` + methods + `$derived` co-located. See "State pattern" below. |
+| Components | **shadcn/ui** | Components are *copied into the repo* (`src/components/ui/`), not a dependency. LLMs can grep and read the exact API instead of hallucinating props. Add one when a screen actually needs it — the folder starts empty. |
+| Icons | **lucide-react** | De-facto standard, huge set, tree-shakes. Add when first needed. |
+| State | **Zustand** | One store per domain in `src/state/`, state + actions co-located. See "State pattern" below. |
 | Backend | **Firebase** — Auth, Firestore, Functions, Storage (private; signed-URL access only) | Same as reference app. All resources in one region, chosen at project creation — see "Region" below. Storage is fully private; access goes through callable-minted signed URLs — see "Storage privacy posture" below. |
 | Auth (default) | **Firebase Auth — phone (SMS) sign-in** + `users` whitelist in Firestore (doc id = E.164 mobile) | Gates everything except `/`, the sign-in screen; the whole signed-in surface sits in the `(app)` route group. No public/anonymous surface. Zero passwords, no OAuth consent screen, signed-in users self-administer from `/users`. Billed per SMS and locked to an allowlisted country — see CLAUDE-AUTH.md before touching either. |
 | Validation | **Zod** | Used at every I/O boundary: form → Firestore, LLM response → typed object, scraped fields → typed object. |
@@ -27,7 +27,7 @@ The stack is chosen to maximise **first-shot correctness from LLMs**. That means
 | Email (outbound) | **Gmail API**, sending from the user's own Gmail account | Avoids Resend/SendGrid account setup. |
 | Notifications (push to phone) | **Ntfy** (`ntfy.sh`) | Zero-account, free, one `fetch` call. Topic lives in `functions/.env`. |
 | Local dev | **Firebase emulator suite** | Free local emulation is a hard requirement — see ../CLAUDE.md. |
-| Lint/format | **ESLint + Prettier + svelte-check** | `npm run check` = `svelte-check && tsc && eslint .`; `npm run format` = Prettier (svelte + tailwind class sorting) |
+| Lint/format | **ESLint + Prettier + tsc** | `npm run check` = `tsc --noEmit && eslint .`; `npm run format` = Prettier (tailwind class sorting). ESLint runs the full `react-hooks` set, React Compiler rules included. |
 
 ---
 
@@ -101,17 +101,18 @@ Keep the TTL short (15min is the default for playback-style use; tighten further
 
 ## Scope
 
-The app ships deliberately minimal: sign-in, the users whitelist, and the capability layer below. New features land in their own routes (`src/routes/(app)/<feature>/` — inside the group, so they inherit the auth gate) and their own `functions/src/<feature>/` folder.
+The app ships deliberately minimal: sign-in, the users whitelist, and the capability layer below. New features land in their own page (`src/pages/<Feature>Page.tsx`, registered under `AppLayout` in `src/router.tsx` so they inherit the auth gate) and their own `functions/src/<feature>/` folder.
 
-The capability layer — `src/lib/services/`, `src/lib/state/`, `src/lib/utils/`, `functions/src/common/` (shared zod schemas + types), and `functions/src/` — is what gets extended, not replaced. Keep new code consistent with the patterns already there.
+The capability layer — `src/services/`, `src/state/`, `src/utils/`, `functions/src/common/` (shared zod schemas + types), and `functions/src/` — is what gets extended, not replaced. Keep new code consistent with the patterns already there.
 
 ---
 
-## SvelteKit config
+## Vite + React config
 
-- `adapter-static` with `fallback: 'index.html'` — SPA mode, client-side routing.
-- Root `+layout.ts` exports `export const ssr = false` and `export const prerender = false` — disables SSR globally so Firebase client SDK code runs without `if (browser)` guards.
-- File-based routing with **route groups** `(groupname)/` for layout boundaries that don't affect the URL. This app uses one: `(app)/` holds every authed screen and carries the gate, so a new page is gated by where you put it.
+- Plain `vite build` → `client/dist`, a static SPA. Firebase Hosting rewrites `**` to `/index.html` so client-side routing works on a hard refresh.
+- There is no SSR and no prerender step at all, so Firebase client SDK code runs without `typeof window` guards.
+- Routing is a **route table**, not a folder convention: `src/router.tsx` lists every URL. Routes nested under `AppLayout` are behind the auth gate; routes at the top level are public. **A new page is gated by which array it goes in** — see CLAUDE-AUTH.md.
+- Two path aliases, declared in both `vite.config.ts` and `tsconfig.json`: `@/` → `client/src/`, `@common/` → `functions/src/common/`.
 
 ---
 
@@ -119,18 +120,20 @@ The capability layer — `src/lib/services/`, `src/lib/state/`, `src/lib/utils/`
 
 | Layer | Role | Imports from |
 |---|---|---|
-| `src/routes/` | URL → page composition, layouts | `$lib/components`, `$lib/state` |
-| `src/lib/components/` | Presentational + interactive UI | `$lib/state`, `$lib/components/ui` |
-| `src/lib/components/ui/` | shadcn-svelte primitives (owned, editable) | Tailwind, bits-ui |
-| `src/lib/state/` | Rune stores + domain actions | `$lib/services`, `$common` |
-| `src/lib/services/` | Firestore I/O, stateless, `uid`-first | `$common`, firebase SDK |
-| `$common/*` (= `functions/src/common/`) | zod schemas + their `z.infer` types for Firestore-backed docs, tagged with `@collection`. **Single home, shared client ↔ functions** — must stay browser-safe (no `firebase-admin` / Node-only imports). | `zod` |
-| `src/lib/utils/` | Pure helpers (parsers, id gen, formatters) | `$common` |
+| `src/router.tsx` | The URL map, and the auth gate | `@/layouts`, `@/pages` |
+| `src/pages/` | One file per screen | `@/components`, `@/state` |
+| `src/layouts/` | Shared chrome + the signed-in gate | `@/components`, `@/state` |
+| `src/components/` | Presentational + interactive UI | `@/state`, `@/components/ui` |
+| `src/components/ui/` | shadcn/ui primitives (owned, editable) | Tailwind |
+| `src/state/` | Zustand stores + domain actions | `@/services`, `@common` |
+| `src/services/` | Firestore I/O, stateless, `uid`-first | `@common`, firebase SDK |
+| `@common/*` (= `functions/src/common/`) | zod schemas + their `z.infer` types for Firestore-backed docs, tagged with `@collection`. **Single home, shared client ↔ functions** — must stay browser-safe (no `firebase-admin` / Node-only imports). | `zod` |
+| `src/utils/` | Pure helpers (parsers, id gen, formatters) | `@common` |
 
 **Hard rules:**
 - Components **never** import from `services/` directly — they go through `state/`.
 - Services **never** import from `state/`. Keeps them testable and framework-free.
-- `state/*.svelte.ts` is the **only** place that mutates domain state. Single source of truth, easy to grep.
+- `src/state/*` is the **only** place that mutates domain state. Single source of truth, easy to grep.
 
 ---
 
@@ -138,96 +141,98 @@ The capability layer — `src/lib/services/`, `src/lib/state/`, `src/lib/utils/`
 
 ```
 client/
+├── index.html                       ← the SPA shell (fonts, #root)
 ├── src/
-│   ├── routes/                      ← file-based routing
-│   │   ├── +layout.svelte           ← app shell
-│   │   ├── +layout.ts               ← ssr=false, prerender=false
-│   │   ├── +page.svelte
-│   │   └── (app)/
-│   │       ├── +layout.svelte       ← authed layout
-│   │       └── .../+page.svelte
-│   ├── lib/
-│   │   ├── components/              ← flat; split by feature only past ~20 files
-│   │   │   └── ui/                  ← shadcn-svelte primitives
-│   │   ├── state/                   ← class-based rune stores (.svelte.ts)
-│   │   ├── services/                ← Firestore I/O
-│   │   │   └── firebase.ts          ← init singleton + getFirebaseServices()
-│   │   └── utils/
-│   │   (zod schemas + types live in functions/src/common/, imported as `$common/*`)
-│   ├── app.html
-│   ├── app.css                      ← Tailwind entry
-│   └── app.d.ts
-├── static/                          ← public assets (was `public/` in CRA/Vite-React)
-├── svelte.config.js
-├── vite.config.ts
-├── tailwind.config.ts
-├── tsconfig.json
+│   ├── main.tsx                     ← createRoot + StrictMode + RouterProvider
+│   ├── router.tsx                   ← THE route table, and the auth gate
+│   ├── layouts/
+│   │   └── AppLayout.tsx            ← signed-in gate + top bar + <Outlet/>
+│   ├── pages/                       ← one file per screen
+│   ├── components/                  ← flat; split by feature only past ~20 files
+│   │   └── ui/                      ← shadcn/ui primitives (empty until needed)
+│   ├── state/                       ← Zustand stores
+│   ├── services/                    ← Firestore I/O
+│   ├── firebase/init.ts             ← init singleton + getFirebase()
+│   ├── utils/
+│   │   (zod schemas + types live in functions/src/common/, imported as `@common/*`)
+│   └── app.css                      ← Tailwind entry + @theme tokens
+├── public/                          ← static assets served at root
+├── dist/                            ← build output (gitignored)
+├── vite.config.ts                   ← plugins + the @ / @common aliases
+├── eslint.config.js
+├── tsconfig.json                    ← one file, no project references
 └── package.json
 ```
 
+There is deliberately **no `tailwind.config.js`** — Tailwind v4 is configured in `src/app.css`.
+
 ---
 
-## State pattern — class-based rune stores
+## State pattern — Zustand stores
 
-One file per domain, exported as a singleton. State + actions + derived values co-located.
+One file per domain in `src/state/`, exported as `useXStore`. State and actions co-located.
 
 ```ts
-// src/lib/state/CategoriesStore.svelte.ts
-import * as CategoryService from '$lib/services/CategoryService'
-import type { Category, CategoryGroup } from '$common/Category'
-import { generateId } from '$lib/utils/generateId'
+// src/state/categoriesStore.ts
+import { create } from 'zustand';
+import * as CategoryService from '@/services/CategoryService';
+import type { Category } from '@common/Category';
+import { generateId } from '@/utils/generateId';
 
-class CategoriesStore {
-  items = $state<Category[]>([])
-  groups = $state<CategoryGroup[]>([])
-  byId = $derived(new Map(this.items.map((c) => [c.id, c])))
+type CategoriesState = {
+  items: Category[];
+  ensureCategory: (uid: string, name: string, groupId: string) => Promise<string>;
+};
 
-  async ensureCategory(uid: string, name: string, groupId: string): Promise<string> {
-    const existing = this.items.find((c) => c.name === name)
-    if (existing) return existing.id
-    const order = this.items.filter((c) => c.groupId === groupId).length
-    const cat: Category = { id: generateId(), name, groupId, order }
-    await CategoryService.createCategory(uid, cat)
-    this.items.push(cat)
-    return cat.id
-  }
-}
+export const useCategoriesStore = create<CategoriesState>((set, get) => ({
+  items: [],
 
-export const categoriesStore = new CategoriesStore()
+  ensureCategory: async (uid, name, groupId) => {
+    const existing = get().items.find((c) => c.name === name);
+    if (existing) return existing.id;
+    const order = get().items.filter((c) => c.groupId === groupId).length;
+    const cat: Category = { id: generateId(), name, groupId, order };
+    await CategoryService.createCategory(uid, cat);
+    set((s) => ({ items: [...s.items, cat] }));
+    return cat.id;
+  },
+}));
 ```
 
 Components then do:
 
-```svelte
-<script lang="ts">
-  import { categoriesStore } from '$lib/state/CategoriesStore.svelte'
-</script>
+```tsx
+// One selector per field — selecting an object literal returns a new
+// reference every render and re-renders on every unrelated change.
+const items = useCategoriesStore((s) => s.items);
 
-{#each categoriesStore.items as cat (cat.id)}
-  <div>{cat.name}</div>
-{/each}
+return items.map((cat) => <div key={cat.id}>{cat.name}</div>);
+```
+
+Outside a component — in an effect, a callback, another store — read it imperatively with no subscription:
+
+```ts
+useCategoriesStore.getState().ensureCategory(uid, name, groupId);
 ```
 
 **Why this shape:**
-- No `useCallback`, no stale closures, no provider tree.
+- No provider tree, no context plumbing, no `useReducer` boilerplate.
 - Every mutation for a domain lives in one file — easy to grep, easy for an LLM to understand without reading five hook files.
-- `$derived` replaces Jotai's derived atoms.
-- The class is a plain JS class — testable in isolation with no framework harness.
-
----
+- Derived values are computed in the component during render, or in a selector; there is no separate derived-atom concept to learn.
+- The store is callable outside React, so services and effects use the same API components do.
 
 ## Services pattern
 
 Stateless function modules. `uid` is always the first argument. Firestore batch writes chunk at 500 and commit in parallel with `Promise.all`. After a write, the **caller** (a state store) merges into local state — services never touch stores.
 
 ```ts
-// src/lib/services/CategoryService.ts
+// src/services/CategoryService.ts
 import { collection, doc, writeBatch } from 'firebase/firestore'
-import { getFirebaseServices } from './firebase'
-import type { Category } from '$common/Category'
+import { getFirebase } from '@/firebase/init'
+import type { Category } from '@common/Category'
 
 export async function createCategory(uid: string, cat: Category): Promise<void> {
-  const { db } = await getFirebaseServices()
+  const { db } = getFirebase()
   const ref = doc(collection(db, `users/${uid}/categories`), cat.id)
   // ...
 }
@@ -235,11 +240,11 @@ export async function createCategory(uid: string, cat: Category): Promise<void> 
 
 ## Data model conventions
 
-- All Firestore-backed schemas live in **`functions/src/common/`** — single source of truth, shared with the client via the `$common` alias (configured in `client/svelte.config.js`). Files there must stay browser-safe (zod + pure TS only, no `firebase-admin` / Node-only imports).
+- All Firestore-backed schemas live in **`functions/src/common/`** — single source of truth, shared with the client via the `@common` alias (configured in both `client/vite.config.ts` and `client/tsconfig.json`). Files there must stay browser-safe (zod + pure TS only, no `firebase-admin` / Node-only imports).
 - One PascalCase file per type (e.g. `User.ts`). Each file exports a zod schema and a `z.infer`-derived type — never declare a bare `interface` here. Multiple related types may share a file, each with its own `@collection` tag.
 - Every Firestore-backed type carries a `@collection` JSDoc tag with its full path (e.g. `@collection users/{e164Mobile}` or `@collection users/{uid}/transactions`). Update the tag when renaming/moving collections.
 - Validate at I/O boundaries: parse incoming Firestore snapshots and outgoing writes with the schema (`userSchema.parse(...)`) so a drifting wire shape fails loudly instead of silently corrupting state.
-- Imports: `import { userSchema, type User } from '$common/User'` (client) or `'../common/User'` (functions, relative).
+- Imports: `import { userSchema, type User } from '@common/User'` (client) or `'../common/User'` (functions, relative).
 
 ## Schema migration
 
@@ -254,14 +259,14 @@ A `SchemaService` owns a `CURRENT_SCHEMA` version and a migration chain. `migrat
 ```json
 {
   "scripts": {
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc --noEmit && eslint .",
-    "dev": "vite dev",
-    "build": "npm run check && vite build"
+    "check": "tsc --noEmit && eslint .",
+    "dev": "vite",
+    "build": "vite build"
   }
 }
 ```
 
-`svelte-check` covers both `.svelte` and `.ts` type-checking, so a separate `tsc --noEmit` is not needed.
+ESLint runs the full `eslint-plugin-react-hooks` recommended set — including the React Compiler rules (purity, immutability, `set-state-in-effect`) — with `rules-of-hooks` and `exhaustive-deps` promoted to errors. Those two catch the classic React bugs: a hook behind an early return, and an effect reading a stale value.
 
 ---
 

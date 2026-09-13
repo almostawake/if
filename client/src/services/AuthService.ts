@@ -7,7 +7,7 @@ import {
   type ConfirmationResult,
   type User,
 } from 'firebase/auth';
-import { getFirebase } from '$lib/firebase/init';
+import { getFirebase } from '@/firebase/init';
 
 const RECAPTCHA_HOST_ID = 'if-recaptcha';
 

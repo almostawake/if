@@ -13,7 +13,7 @@ The local project id is `demo-not-required` — a Firebase emulator convention, 
 Always use the npm scripts, never direct `firebase` commands:
 
 - Emulators: `npm run start:emulators` — logs to `/tmp/firebase-emulator.log`
-- Client: `npm run start:client` (SvelteKit dev server, port 5173)
+- Client: `npm run start:client` (Vite dev server, port 5173)
 
 **Detect and reuse first.** On first browser interaction in a conversation, check the ports and start only what's down — never restart something already running:
 
@@ -82,7 +82,7 @@ You have full autonomy over emulator state. Don't hesitate to create users, log 
 **Auth helpers** (use via `javascript_tool`):
 
 ```js
-const { getFirebase } = await import('/src/lib/firebase/init.ts');
+const { getFirebase } = await import('/src/firebase/init.ts');
 const { auth } = getFirebase();
 auth.currentUser   // → User | null
 await auth.signOut();
@@ -108,15 +108,15 @@ Sign in goes through the app's SMS flow against the auth emulator, which sends n
 
 **Native dialogs** (`alert`, `confirm`, `prompt`) block the browser extension — inject test data programmatically via `javascript_tool` instead.
 
-**Loading data programmatically:** copy the file to `client/static/` (SvelteKit serves it at root), `fetch('/file.json')` via `javascript_tool`, then clean up the copy. Always reload the page after importing so the app's startup hooks create parent docs and pick up new state. `client/static/*.json` should be gitignored to prevent accidentally committing test data.
+**Loading data programmatically:** copy the file to `client/public/` (Vite serves it at root), `fetch('/file.json')` via `javascript_tool`, then clean up the copy. Always reload the page after importing so the app's startup hooks create parent docs and pick up new state. `client/public/*.json` is gitignored to prevent accidentally committing test data.
 
 ```js
-const { getFirebase } = await import('/src/lib/firebase/init.ts');
+const { getFirebase } = await import('/src/firebase/init.ts');
 const { auth } = getFirebase();
 const uid = auth.currentUser.uid;
-const res = await fetch('/myfile.json');           // any file under client/static/
+const res = await fetch('/myfile.json');           // any file under client/public/
 const data = await res.json();
 // then call the app's own import function — never write directly to Firestore.
 ```
 
-**Test fixtures:** project-level test data lives in `client/test/fixtures/` (checked-in) once a project starts accumulating any. Copy to `client/static/` to use, clean up after.
+**Test fixtures:** project-level test data lives in `client/test/fixtures/` (checked-in) once a project starts accumulating any. Copy to `client/public/` to use, clean up after.

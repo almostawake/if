@@ -16,12 +16,12 @@ does, where it lives, what data it touches.
   Manage the `users` collection (doc id = E.164 mobile, e.g.
   `+61412345678`). Presence on the list is what grants sign-in; anyone on
   it can add/remove anyone (users manage users, no separate admin tier).
-- **The `(app)` layout group.** `routes/(app)/` holds every signed-in page
-  and owns the single auth gate + top bar (`AppHeader`: menu top left,
-  your mobile top right). Parentheses keep the group out of the URL, so
-  its pages sit at root level. **New features go in
-  `routes/(app)/<name>/`** — anything added outside the group is
-  ungated.
+- **`AppLayout` and the route table.** `src/router.tsx` is the whole URL
+  map. Routes nested under `AppLayout` are the signed-in surface: that
+  layout owns the single auth gate + top bar (`AppHeader`: menu top left,
+  your mobile top right). **New features go in `src/pages/` and get
+  registered under `AppLayout`'s `children`** — a route added at the top
+  level of the table is ungated.
 - **`api` Cloud Function.** The single inbound HTTP endpoint for external
   callers (webhooks, server-to-server), gated by a bearer secret in
   `functions/.env`. No app-specific routes yet. Conventions: docs/CLAUDE-API.md.

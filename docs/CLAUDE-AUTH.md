@@ -5,9 +5,9 @@
 **Everyone who uses this app signs in.** There is no public or anonymous surface — that's a deliberate change from the earlier shape, not an oversight.
 
 - **`/`** is the sign-in screen and the only ungated route: enter a mobile → six-digit code by SMS → enter it → land on `/users`. Signed in iff `request.auth.token.phone_number` exists in `/users/{mobile}`. SMS only — no passwords, no email, no OAuth.
-- **Everything else** lives in the `(app)` route group (`client/src/routes/(app)/`), which owns the single auth gate and the top bar. The parentheses are a SvelteKit layout group: they keep the segment out of the URL, so its pages are served at root level (`/users` today, `/scopes` and friends later) while sharing one gate.
+- **Everything else** lives under `AppLayout` (`client/src/layouts/AppLayout.tsx`), which owns the single auth gate and the top bar. `client/src/router.tsx` nests those routes as its `children`, so its pages are served at root level (`/users` today, `/scopes` and friends later) while sharing one gate.
 
-**A new page is gated by where you put it.** `routes/(app)/thing/+page.svelte` is behind the gate; `routes/thing/+page.svelte` is wide open to the internet. Don't add anything outside the group without asking.
+**A new page is gated by where you register it.** A route listed in `AppLayout`'s `children` is behind the gate; one listed at the top level of the route table is wide open to the internet. Don't add anything outside the layout without asking.
 
 **Firebase's Anonymous Authentication provider (`signInAnonymously()`) is off-limits**, as are public Firestore rules and additions to the `api` function's no-bearer allowlist. If a feature seems to need an unauthenticated data path, stop and ask rather than inventing one.
 
@@ -54,7 +54,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 ## Domains
 
-`authDomain` (client SDK config, `client/src/lib/firebase/init.ts`) governs Firebase Auth's OAuth popup/redirect surfaces (`/__/auth/handler`, `/__/auth/iframe`). **SMS sign-in doesn't use them** — the phone flow talks to identitytoolkit directly. It's computed from `window.location.host` purely so that *if* an OAuth provider is ever added it works same-origin.
+`authDomain` (client SDK config, `client/src/firebase/init.ts`) governs Firebase Auth's OAuth popup/redirect surfaces (`/__/auth/handler`, `/__/auth/iframe`). **SMS sign-in doesn't use them** — the phone flow talks to identitytoolkit directly. It's computed from `window.location.host` purely so that *if* an OAuth provider is ever added it works same-origin.
 
 What phone sign-in *does* care about is the **authorised domains** list in project config: reCAPTCHA refuses to run on a host that isn't on it. `n` adds `localhost` at provisioning (projects created after 2025-04-28 don't include it by default) alongside the two Firebase Hosting domains.
 
