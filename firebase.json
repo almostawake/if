@@ -15,6 +15,12 @@
     "public": "client/dist",
     "predeploy": ["npm run build:all"],
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "source": "/version.json",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      }
+    ],
     "rewrites": [
       { "source": "/consent", "function": { "functionId": "api" } },
       { "source": "/oauth/**", "function": { "functionId": "api" } },

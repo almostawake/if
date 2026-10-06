@@ -1,10 +1,38 @@
 import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+import { projectRegion } from '../cmd-region.mjs';
+
+// The Functions emulator serves at /<project>/<region>/<function>, in the
+// same region the deploy uses (root .env → cmd-region.mjs). Read once here;
+// never spell a region out in this file.
+const EMULATOR_API = `http://localhost:5001/demo-not-required/${projectRegion()}/api`;
+
+// Build id, stamped twice from this one value: compiled into the bundle as
+// `__BUILD_ID__` (define below) and written to dist/version.json (plugin
+// below). src/version.ts compares the two at runtime to notice a newer
+// deploy. A timestamp rather than a git sha, so every build — even one with
+// no new commits — counts as new.
+const BUILD_ID = new Date().toISOString();
+
+function versionJson(): Plugin {
+  return {
+    name: 'version-json',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ build: BUILD_ID }),
+      });
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), versionJson()],
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   resolve: {
     alias: {
       // `@` is the client's own src. This spelling (not `$lib`) is what
@@ -31,8 +59,8 @@ export default defineConfig({
     // user sees identical in dev and prod (e.g. http://localhost:5173/consent
     // ↔ https://<project>.web.app/consent).
     proxy: {
-      '/consent': 'http://localhost:5001/demo-not-required/australia-southeast1/api',
-      '/oauth': 'http://localhost:5001/demo-not-required/australia-southeast1/api',
+      '/consent': EMULATOR_API,
+      '/oauth': EMULATOR_API,
     },
   },
 });

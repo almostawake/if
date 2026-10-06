@@ -22,6 +22,8 @@ The wrapper (`cmd-deploy.mjs`) reads the OAuth refresh token from `~/.if/creds/g
 
 `firebase deploy` and `firebase emulators:*` flow through the auth-blocking hook fine; only the *login* sub-commands are blocked. Build is wired into `firebase.json`'s hosting `predeploy` so it runs automatically when hosting is in scope.
 
+**Open tabs after a hosting deploy** pick up the new build on their next route change, not immediately: `src/version.ts` polls `/version.json` (stamped by the build, served `Cache-Control: no-store` via `firebase.json`) and reloads only at a navigation, so in-progress edits survive. Cloud Functions switch over the instant they deploy, so a stale tab can talk to a new function for a while — keep `api`/callable changes backward-compatible for one release when the client depends on them. Don't move `version.json` into `public/` (gitignored `*.json` there) or give it a long cache; the check depends on it being current.
+
 **Multi-account deploy:** `EMAIL_OF_GOOGLE_HOSTING_ACCOUNT=alice@x.com npm run deploy:functions` picks up `~/.if/creds/google.alice@x.com.json` for that one run.
 
 Do NOT deploy unless the user explicitly asks.

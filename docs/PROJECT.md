@@ -22,6 +22,12 @@ does, where it lives, what data it touches.
   your mobile top right). **New features go in `src/pages/` and get
   registered under `AppLayout`'s `children`** — a route added at the top
   level of the table is ungated.
+- **Deploys reach open tabs on their next navigation.** The build stamps
+  an id into the bundle and into `version.json`; `src/version.ts` checks
+  that file in the background (tab regains focus, every 5 min) and, once a
+  newer build is live, reloads at the user's next route change — never
+  mid-page, so nothing being typed is lost. Only in-memory store state
+  that outlives navigation is at risk (docs/CLAUDE-REACT.md § State).
 - **`api` Cloud Function.** The single inbound HTTP endpoint for external
   callers (webhooks, server-to-server), gated by a bearer secret in
   `functions/.env`. No app-specific routes yet. Conventions: docs/CLAUDE-API.md.

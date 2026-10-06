@@ -80,7 +80,7 @@ The same secret is used by the emulator — calls in local dev need the bearer t
 
 ## Region
 
-Functions deploy to whatever region the project's Firestore database lives in. That region is **immutable** — chosen once at project creation (default `australia-southeast1`). `cmd-deploy.mjs` looks it up and injects it as `FIREBASE_REGION`, which `setGlobalOptions` reads at the top of `functions/src/index.ts`. No hardcoded region to drift, and functions always sit with their data. Don't override per-function — keeping everything in one region avoids cross-region latency and egress.
+Functions deploy to whatever region the project's Firestore database lives in. That region is **immutable** — chosen once at project creation (default `australia-southeast1`) and recorded in root `.env` as `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`. `cmd-region.mjs` is the only reader of that value: the functions build runs it to generate `functions/src/region.ts` (gitignored), which `setGlobalOptions` reads at the top of `functions/src/index.ts`, and the OAuth dev callback URL and the Vite dev proxy take their emulator region from the same place. No hardcoded region anywhere to drift, and functions always sit with their data. Don't override per-function — keeping everything in one region avoids cross-region latency and egress. Full mechanics: docs/CLAUDE-STACK.md → Region.
 
 ## Where it's reachable
 

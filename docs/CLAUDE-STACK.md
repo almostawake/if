@@ -38,6 +38,10 @@ Every Firebase resource for a project lives in **one region**, chosen once when 
 - **Firestore** and the **default Storage bucket** — created with the project. Default `australia-southeast1` (Sydney); single regions only — Functions can't live in a multi-region like `nam5`. **Immutable** once set.
 - **Cloud Functions** (and the Cloud Run services + Artifact Registry repos they spawn) — deploy to that same region automatically. The region is recorded in `.env` as `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`; the functions build generates `functions/src/region.ts` from it (`cmd-region.mjs`), and `setGlobalOptions` reads it in `functions/src/index.ts`. It's baked into source rather than passed as an env var because firebase-tools runs functions discovery in a subprocess with a fixed, minimal env that user values never reach. `region.ts` is gitignored and regenerated on every build.
 
+- **Local dev** follows the same value. The Functions emulator serves at `localhost:5001/demo-not-required/<region>/<function>`, so `client/vite.config.ts` builds its `/consent` + `/oauth` proxy target from `projectRegion()` (exported by `cmd-region.mjs`), and the OAuth dev redirect URI in `functions/src/api/oauth.ts` uses the generated `FUNCTIONS_REGION`. That dev redirect URI is region-specific — register the project's own one on the OAuth client (see `functions/.env.example`).
+
+`cmd-region.mjs` is the **only** reader of `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`, and there is deliberately no fallback: with no region in `.env` the functions build and the client dev server both stop with the same message rather than guess. Never write a region literal into code, config, or docs-as-instructions — import it.
+
 Functions always sit with their data — no cross-region latency or egress. Don't override per-function; if you genuinely need a function elsewhere, set `region` on that specific `onRequest` / `onCall`, not on `setGlobalOptions`.
 
 ---

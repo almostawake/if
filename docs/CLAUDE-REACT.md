@@ -123,6 +123,8 @@ Outside a component (inside an effect, a callback, another store) read the store
 useUsersStore.getState().recordSignIn(user);
 ```
 
+**Store state does not survive a route change after a deploy.** `src/version.ts` reloads the page at the next navigation once a newer build is live. Firestore-backed state simply re-subscribes; a long-lived draft held only in a store would be lost — persist it to `sessionStorage` (or Firestore) if it must outlive navigation.
+
 **`src/state/` is the only place that mutates domain state.** Components go through a store; stores go through `src/services/`; services never import stores. Single source of truth, easy to grep.
 
 ## Routing — React Router v7, declarative mode

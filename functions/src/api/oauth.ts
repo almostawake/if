@@ -7,6 +7,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { getFirestore } from 'firebase-admin/firestore';
 import { createHmac, randomBytes } from 'node:crypto';
 import { grantSchema } from '../common/Grant';
+import { FUNCTIONS_REGION } from '../region';
 
 const router = Router();
 
@@ -20,14 +21,16 @@ const router = Router();
 // always sets. Same origin as the Firebase Auth SDK's authDomain (also
 // <project>.web.app) so cookies stay first-party in Chrome.
 //
-// Dev URI is hardcoded against `demo-not-required` because that's the project
-// id the emulator runs under (npm run start:emulators uses --project
-// demo-not-required as a deliberate constraint — see docs/CLAUDE-EMULATORS.md).
-// TODO(emulator): the dev URI's region is still hardcoded — fold into the
-// emulator region pass.
+// Dev: the emulator serves functions at /<project>/<region>/<function>.
+// `demo-not-required` is the project id the emulator runs under (npm run
+// start:emulators uses --project demo-not-required as a deliberate
+// constraint — see docs/CLAUDE-EMULATORS.md); the region is the project's
+// own, from the generated ../region (root .env → cmd-region.mjs), so this
+// URI moves with the project. Register the region-specific dev URI on the
+// OAuth client — it differs per project.
 function redirectUri(): string {
   return process.env.FUNCTIONS_EMULATOR
-    ? 'http://localhost:5001/demo-not-required/australia-southeast1/api/oauth/callback'
+    ? `http://localhost:5001/demo-not-required/${FUNCTIONS_REGION}/api/oauth/callback`
     : `https://${process.env.GCLOUD_PROJECT}.web.app/oauth/callback`;
 }
 
