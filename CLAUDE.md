@@ -9,7 +9,7 @@ A small web app on Firebase: React client (Vite SPA) + Cloud Functions + Firesto
 Three surfaces:
 
 - **`/`** — the sign-in screen, and the only ungated route. Enter a mobile, enter the SMS code, land on `/users`. There is no anonymous/public surface in this app: everything else is behind the gate.
-- **The signed-in surface** — everything you sign in for, served at root-level URLs (`/users` today). `src/router.tsx` is the whole URL map: routes nested under `AppLayout` are gated by that one layout. **New pages go in `AppLayout`'s `children` in `src/router.tsx`** — that is what makes them gated; a route added at the top level of that array is wide open. Gated by the `users` collection: SMS-code sign-in, no passwords, no email, no OAuth.
+- **The signed-in surface** — everything you sign in for, served at root-level URLs (`/users` today). `src/router.tsx` is the whole URL map: routes nested under `AppLayout` are gated by that one layout. **New pages go in `AppLayout`'s `children` in `src/router.tsx`** — that is what makes them gated; a route added at the top level of that array is wide open — **and in `SCREENS` in `src/components/AppHeader.tsx`**, which is the menu and the screen's name. Gated by the `users` collection: SMS-code sign-in, no passwords, no email, no OAuth.
 - **`api` Cloud Function** — the single inbound HTTP endpoint for external callers (webhooks, server-to-server), gated by its own bearer secret in `functions/.env`.
 
 ## Environments
@@ -24,7 +24,7 @@ Three surfaces:
 |---|---|
 | Any feature work | **docs/PROJECT.md** — what exists now |
 | Choosing tech / adding a capability | **docs/CLAUDE-STACK.md** — stick to this stack, it's pre-provisioned |
-| Writing any client code | **docs/CLAUDE-REACT.md** — React conventions and drift guide |
+| Writing any client code | **docs/CLAUDE-REACT.md** — React conventions, the design rules (§ Design), and drift guide |
 | Firestore data / schemas | **docs/CLAUDE-STACK.md** § Data model conventions |
 | Any inbound HTTP endpoint (webhook, server-to-server) | **docs/CLAUDE-API.md** |
 | Running the app on this machine — any request to start, stop, restart, or check it, however worded ("run it up", "shut it down", "is it running?", "the servers", "local", "here") — plus seeding data and driving the app in a browser | **docs/CLAUDE-EMULATORS.md** |

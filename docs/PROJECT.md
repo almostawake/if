@@ -18,10 +18,19 @@ does, where it lives, what data it touches.
   it can add/remove anyone (users manage users, no separate admin tier).
 - **`AppLayout` and the route table.** `src/router.tsx` is the whole URL
   map. Routes nested under `AppLayout` are the signed-in surface: that
-  layout owns the single auth gate + top bar (`AppHeader`: menu top left,
-  your mobile top right). **New features go in `src/pages/` and get
-  registered under `AppLayout`'s `children`** — a route added at the top
-  level of the table is ungated.
+  layout owns the single auth gate + top bar (`AppHeader`: menu top left
+  listing every screen with the current one highlighted, then sign out,
+  then your mobile and the version greyed; the screen's name beside the
+  menu; a control slot and an indicator slot a page fills with
+  `HeaderControl` / `HeaderRight`). **New features go in `src/pages/`,
+  get registered under `AppLayout`'s `children`, and get an entry in
+  `SCREENS`** — a route added at the top level of the table is ungated.
+  Pages are content only: no heading, no description (docs/CLAUDE-REACT.md
+  § Design).
+- **Shared controls and look.** Tokens in `client/src/app.css`;
+  `Button`, `Input`, `SearchInput`, `InlineInput`, `Spinner`, `Marked`,
+  `ErrorBoundary` in `src/components/`; search rules and kept scroll
+  position in `src/utils/`. Every page comes back where it was scrolled to.
 - **Deploys reach open tabs on their next navigation.** The build stamps
   an id into the bundle and into `version.json`; `src/version.ts` checks
   that file in the background (tab regains focus, every 5 min) and, once a

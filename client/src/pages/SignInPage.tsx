@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { ConfirmationResult } from 'firebase/auth';
+import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
 import { useAuthStore } from '@/state/authStore';
 import { useUsersStore } from '@/state/usersStore';
 import { AuthService } from '@/services/AuthService';
@@ -9,9 +11,9 @@ import { formatAuMobile, normalizeAuMobile } from '@common/mobile';
 /**
  * The app's front door. There is no public/marketing surface — you land
  * here, sign in, and land on /users. Two steps in one route: enter a
- * mobile, then enter the code texted to it. (A separate /auth/action
- * route, which email-link sign-in needed, has no equivalent — there's no
- * link to land on, so the whole flow stays in this component's state.)
+ * mobile, then enter the code texted to it. "start again" abandons an
+ * in-flight code and returns to the number field. No header: the sign-in
+ * screen has no chrome at all.
  */
 export function SignInPage() {
   const navigate = useNavigate();
@@ -47,7 +49,7 @@ export function SignInPage() {
     if (busy) return;
     const e164 = normalizeAuMobile(mobile);
     if (!e164) {
-      setError("that's not an australian mobile — like 0412 345 678");
+      setError('australian mobiles only — 04xx xxx xxx or +61 4xx xxx xxx');
       return;
     }
     setBusy(true);
@@ -92,72 +94,68 @@ export function SignInPage() {
     }
   }
 
-  function startOver() {
+  function startAgain() {
     setConfirmation(null);
     setCode('');
     setError(null);
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6">
-      {!confirmation ? (
-        <form onSubmit={submitMobile} className="space-y-3">
-          {denied && (
-            <div className="text-err">
-              that number isn't on the admin list. ask an existing admin to add you.
+    <div className="flex min-h-dvh flex-col items-center justify-center px-6">
+      <div className="flex w-full max-w-[520px] flex-col items-start gap-3">
+        {!confirmation ? (
+          <form onSubmit={submitMobile} className="contents">
+            <div className="section-label">sign in with your mobile</div>
+            <div className="flex w-full items-center gap-2">
+              <Input
+                id="mobile"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                required
+                className="w-full max-w-[300px]"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                placeholder="04xx xxx xxx"
+              />
+              <Button type="submit" disabled={busy || !mobile.trim()}>
+                {busy ? 'sending…' : 'send code'}
+              </Button>
             </div>
-          )}
-          <div className="flex items-center gap-2">
-            <input
-              id="mobile"
-              className="tx-input w-[360px]"
-              type="tel"
-              autoComplete="tel"
-              required
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value)}
-              placeholder="0412 345 678"
-            />
-            <button
-              className="tx-btn whitespace-nowrap"
-              type="submit"
-              disabled={busy || !mobile.trim()}
-            >
-              {busy ? 'sending…' : 'text me a code'}
+          </form>
+        ) : (
+          <form onSubmit={submitCode} className="contents">
+            <div className="section-label">enter the code</div>
+            <div className="text-small text-fg-faint">sent by sms to {formatAuMobile(sentTo)}</div>
+            <div className="flex w-full items-center gap-2">
+              <Input
+                id="code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                required
+                ref={codeRef}
+                className="w-full max-w-[300px]"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="123456"
+              />
+              <Button type="submit" disabled={busy || !code.trim()}>
+                {busy ? '…' : 'sign in'}
+              </Button>
+            </div>
+            <button type="button" className="text-small text-accent" onClick={startAgain}>
+              start again
             </button>
+          </form>
+        )}
+        {denied && (
+          <div className="text-err">
+            that number isn't on the list. ask an existing user to add you.
           </div>
-          {error && <div className="text-err">{error}</div>}
-        </form>
-      ) : (
-        <form onSubmit={submitCode} className="space-y-3">
-          <p className="text-fg-muted">we texted a code to {formatAuMobile(sentTo)}.</p>
-          <div className="flex items-center gap-2">
-            <input
-              id="code"
-              className="tx-input w-[180px]"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              required
-              ref={codeRef}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="123456"
-            />
-            <button
-              className="tx-btn whitespace-nowrap"
-              type="submit"
-              disabled={busy || !code.trim()}
-            >
-              {busy ? 'checking…' : 'sign in'}
-            </button>
-          </div>
-          {error && <div className="text-err">{error}</div>}
-          <button type="button" className="tx-btn-ghost" onClick={startOver}>
-            use a different number
-          </button>
-        </form>
-      )}
+        )}
+        {error && <div className="text-err">{error}</div>}
+      </div>
     </div>
   );
 }

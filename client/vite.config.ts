@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
 import { projectRegion } from '../cmd-region.mjs';
+import { version } from './package.json';
 
 // The Functions emulator serves at /<project>/<region>/<function>, in the
 // same region the deploy uses (root .env → cmd-region.mjs). Read once here;
@@ -32,7 +33,9 @@ function versionJson(): Plugin {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), versionJson()],
-  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
+  // The version shows at the bottom of the app menu, so a tester can tell
+  // which build they are on.
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID), __APP_VERSION__: JSON.stringify(version) },
   resolve: {
     alias: {
       // `@` is the client's own src. This spelling (not `$lib`) is what

@@ -35,10 +35,16 @@ export const useUsersStore = create<UsersState>(() => ({
     unsub = onSnapshot(
       q,
       (snap) => {
-        useUsersStore.setState({
-          users: snap.docs.map((d) => userSchema.parse(d.data())),
-          loaded: true,
-        });
+        // A row that doesn't fit the schema is skipped, not thrown on: a
+        // throw inside this callback would stop the listener for good and
+        // freeze the list for everyone.
+        const users: User[] = [];
+        for (const d of snap.docs) {
+          const parsed = userSchema.safeParse(d.data());
+          if (parsed.success) users.push(parsed.data);
+          else console.warn('users: skipping malformed row', d.id, parsed.error.issues);
+        }
+        useUsersStore.setState({ users, loaded: true });
       },
       (err) => {
         useUsersStore.setState({ error: err.message, loaded: true });

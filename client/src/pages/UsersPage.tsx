@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
 import { useAuthStore } from '@/state/authStore';
 import { useUsersStore } from '@/state/usersStore';
-import { Page } from '@/components/Page';
 import { formatAuMobile } from '@common/mobile';
 
 /**
  * /users — the landing page after sign-in. Add/remove mobile numbers on
  * the `users` collection. Anyone listed here can sign in and edit this
- * list (users manage users — there's no separate admin tier).
+ * list (users manage users — there's no separate admin tier). Each row:
+ * the number, ×. The list always keeps at least one number.
  */
 export function UsersPage() {
   const user = useAuthStore((s) => s.user);
@@ -62,71 +64,64 @@ export function UsersPage() {
   }
 
   return (
-    <Page title="users" description="these users can sign in and manage this list.">
+    <>
       <ul className="space-y-1">
         {users.map((item) => (
-          <li key={item.mobile} className="group flex items-center gap-2">
+          <li key={item.mobile} className="flex items-center gap-3">
             {/* Stored E.164, shown in the 04xx form people recognise. */}
             <span>{formatAuMobile(item.mobile)}</span>
             {users.length > 1 && (
-              /*
-                Two layered hover states. Row-hover (`group`) reveals the ×
-                button; button-hover (`group/del`) additionally reveals the
-                "delete" label. Mirrors the `+ add a user` pattern below,
-                just in red.
-              */
               <button
                 type="button"
-                className="group/del text-err inline-flex items-center gap-2 opacity-0 group-hover:opacity-100"
+                className="text-err px-1 text-[24px] leading-[26px] hover:opacity-60"
                 onClick={() => remove(item.mobile)}
                 aria-label={`delete ${formatAuMobile(item.mobile)}`}
               >
-                <span className="text-[24px] leading-none">×</span>
-                <span className="opacity-0 transition-opacity group-hover/del:opacity-100">
-                  delete
-                </span>
+                ×
               </button>
             )}
           </li>
         ))}
       </ul>
 
-      <div className="mt-[1.45em]">
+      <div className="mt-[26px]">
         {!adding ? (
           <button
             type="button"
-            className="group text-fg-faint hover:text-fg inline-flex items-center gap-2"
+            className="text-fg-faint hover:text-fg inline-flex items-center"
             onClick={startAdd}
             aria-label="add a user"
           >
-            <span className="text-[24px] leading-none">+</span>
-            <span className="opacity-0 transition-opacity group-hover:opacity-100">add a user</span>
+            <span className="text-[24px] leading-[26px]">+</span>
+            <span>&nbsp;add a user</span>
           </button>
         ) : (
-          <form onSubmit={submitAdd} className="flex items-center gap-2">
-            <input
-              className="tx-input w-72"
-              type="tel"
-              required
+          <form onSubmit={submitAdd} className="flex flex-wrap items-center gap-2">
+            <Input
               ref={inputRef}
-              placeholder="0412 345 678"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              required
+              className="w-[200px]"
+              placeholder="04xx xxx xxx"
               value={newMobile}
               onChange={(e) => setNewMobile(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') cancelAdd();
               }}
             />
-            <button className="tx-btn" type="submit" disabled={saving || !newMobile.trim()}>
+            <Button type="submit" disabled={saving || !newMobile.trim()}>
               {saving ? '…' : 'add'}
-            </button>
-            <button className="tx-btn-ghost" type="button" onClick={cancelAdd}>
+            </Button>
+            <Button variant="ghost" onClick={cancelAdd}>
               cancel
-            </button>
+            </Button>
           </form>
         )}
       </div>
 
       {error && <div className="text-err mt-3">{error}</div>}
-    </Page>
+    </>
   );
 }

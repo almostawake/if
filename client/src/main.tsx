@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { router } from '@/router';
 import { watchForNewVersion } from '@/version';
 import '@/app.css';
@@ -17,6 +18,8 @@ watchForNewVersion(router);
 // down) shows up on your machine instead of in production.
 createRoot(rootEl).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <ErrorBoundary>
+      <RouterProvider router={router} />
+    </ErrorBoundary>
   </StrictMode>,
 );

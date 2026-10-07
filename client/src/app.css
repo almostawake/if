@@ -1,39 +1,57 @@
 @import 'tailwindcss';
 
+/* Design tokens — the single source of truth for every colour, size and
+   face in the app. Never write a hex colour or a px font size in a
+   component; add a token here and use its utility. Light-only, JetBrains
+   Mono everywhere, grayscale plus one indigo accent. */
 @theme {
-  --color-fg: #333;
-  --color-fg-muted: #555;
-  --color-fg-faint: #999;
+  --color-fg: #333333;
+  --color-fg-muted: #555555;
+  --color-fg-faint: #999999;
   --color-bg: #ffffff;
   --color-bg-soft: #fafafa;
   --color-bg-hover: #f5f5f5;
   --color-border: #e0e0e0;
+  /* A heading band: white text on it. */
+  --color-band: #555555;
   --color-accent: #3949ab;
-  --color-ok: #070;
-  --color-err: #b33;
+  /* Tint behind the selected / current / playing thing. */
+  --color-accent-soft: #e8ebf7;
+  --color-ok: #007700;
+  --color-err: #bb3333;
+  /* Tint behind a cell that needs filling in. */
+  --color-err-soft: #fbeeee;
+  /* The ground behind a searched-for word (the Marked component). */
+  --color-mark: #fff3a3;
+
   --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
 
-  /* Horizontal indent shared by all in-app page content. Pinned to where
-     the menu icon's *visible* left edge falls inside the header button:
-     header pl-3 (12px) + half the unused space inside the 56px button
-     (≈19px) = 31px. The (app) <main> applies this so every page inherits
-     it for free; new pages should NOT add their own left padding. */
-  --page-gutter: 31px;
+  /* The three text sizes: body (default), small, label. `text-body`,
+     `text-small`, `text-label` set size and line height together. */
+  --text-body: 18px;
+  --text-body--line-height: 26px;
+  --text-small: 15px;
+  --text-small--line-height: 22px;
+  --text-label: 13px;
+  --text-label--line-height: 19px;
+
+  /* Horizontal indent shared by all in-app page content (`pl-gutter`).
+     The header puts the menu icon's visible left edge on it, and
+     AppLayout's <main> applies it, so page content lines up under the
+     menu icon; pages add no left padding of their own. */
+  --spacing-gutter: 31px;
 }
 
-/* Base layer: ambient styles that should sit below utilities. */
 @layer base {
-  /* Leave html at the browser default so Tailwind's rem-based utilities
-     (text-2xl, p-3, etc.) match their published sizes. Only body picks
-     up the app's preferred body-text size, which is inherited by inputs,
-     buttons, and most components without further config. */
+  /* html stays at the browser default so rem-based utilities keep their
+     published sizes; body carries the app's text preset, inherited by
+     inputs and buttons. */
   body {
     font-family: var(--font-mono);
     background: var(--color-bg);
     color: var(--color-fg);
-    font-size: 18px;
-    line-height: 1.45;
-    min-height: 100vh;
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
   }
 
   a {
@@ -45,53 +63,13 @@
   }
 }
 
-/* Components layer: project-wide classes that utilities can still override. */
 @layer components {
-  /* Small, faint label (e.g. form-field labels). Lowercase per the
-     project-wide no-caps rule — never re-add text-transform here. */
+  /* The label preset: small, faint, medium weight. Lowercase per the
+     project-wide no-caps rule — never add text-transform here. */
   .section-label {
-    font-size: 13px;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
     font-weight: 500;
     color: var(--color-fg-faint);
-  }
-
-  .tx-input {
-    padding: 6px 8px;
-    background: #fff;
-    border: 1px solid var(--color-border);
-    border-radius: 3px;
-    outline: none;
-  }
-  .tx-input:focus {
-    border-color: var(--color-accent);
-  }
-
-  .tx-btn {
-    padding: 6px 12px;
-    background: var(--color-fg);
-    color: #fff;
-    border: 1px solid var(--color-fg);
-    border-radius: 3px;
-    cursor: pointer;
-  }
-  .tx-btn:hover {
-    background: #000;
-  }
-  .tx-btn:disabled {
-    background: #bbb;
-    border-color: #bbb;
-    cursor: not-allowed;
-  }
-
-  .tx-btn-ghost {
-    padding: 6px 12px;
-    background: transparent;
-    color: var(--color-fg);
-    border: 1px solid var(--color-border);
-    border-radius: 3px;
-    cursor: pointer;
-  }
-  .tx-btn-ghost:hover {
-    background: var(--color-bg-hover);
   }
 }
