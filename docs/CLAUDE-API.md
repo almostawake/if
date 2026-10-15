@@ -17,21 +17,9 @@ When adding a new inbound endpoint, **always** add it as a route on the existing
 
 Most routes are gated by a bearer-token middleware that reads `CODE_THAT_OTHER_SERVICES_NEED_TO_GET_PAST_OUR_BOUNCER` from `functions/.env`. The bearer secret is for **external callers** (webhooks, server-to-server, cron pings from outside the project). It is not the right tool for the app's own signed-in users — see "What does NOT live here" below.
 
-### Public browser-facing routes (the narrow exception)
+### No public routes
 
-A short, named allowlist of routes is mounted **above** the bearer middleware and runs without a bearer. Only OAuth-style endpoints qualify: end users open them in a browser, they don't carry the shared secret, and they must work for anonymous visitors before any identity exists. Current allowlist:
-
-- `GET /consent` — kicks off the Google permission flow, 302s to Google
-- `GET /oauth/callback` — Google redirects back here with the auth code; exchange + store
-
-The pattern, in `functions/src/index.ts`:
-
-```ts
-app.use(oauthRouter);  // public — above the gate
-app.use(bearerGate);   // everything below requires the bearer
-```
-
-Don't widen this allowlist casually. If a new route is reachable without a bearer, it must (a) be unambiguously browser-initiated, (b) handle all of its own security (CSRF state, signed cookies, etc.), and (c) be listed here. If it doesn't, it belongs below the gate.
+Every route sits behind the bearer gate. There is no browser-facing exception: the app has no public surface by design. The Google permission grant for Gmail/Calendar is not a route — it runs from a local script (`cmd-consent.mjs`, docs/CLAUDE-DEPLOY.md § Google consent). If a future route genuinely must be reachable without a bearer, it must (a) be unambiguously browser-initiated, (b) handle all of its own security (CSRF state, signed cookies, etc.), (c) be mounted **above** the gate in `functions/src/index.ts`, and (d) be listed here — and ask first.
 
 ## Adding a route
 
@@ -74,20 +62,18 @@ Still one deploy unit, one Cloud Run service, one cold-start. **Never** add a se
 
 ## Env vars
 
-`functions/.env` carries the bearer secret. Firebase Functions Gen 2 auto-loads it both in the emulator and in deployed functions. Gitignored; created at project setup.
+`functions/.env` carries the bearer secret and the Google consent client + refresh token (docs/CLAUDE-DEPLOY.md § Google consent). Firebase Functions Gen 2 auto-loads it both in the emulator and in deployed functions. Gitignored; created at project setup.
 
 The same secret is used by the emulator — calls in local dev need the bearer too, for parity.
 
 ## Region
 
-Functions deploy to whatever region the project's Firestore database lives in. That region is **immutable** — chosen once at project creation (default `australia-southeast1`) and recorded in root `.env` as `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`. `cmd-region.mjs` is the only reader of that value: the functions build runs it to generate `functions/src/region.ts` (gitignored), which `setGlobalOptions` reads at the top of `functions/src/index.ts`, and the OAuth dev callback URL and the Vite dev proxy take their emulator region from the same place. No hardcoded region anywhere to drift, and functions always sit with their data. Don't override per-function — keeping everything in one region avoids cross-region latency and egress. Full mechanics: docs/CLAUDE-STACK.md → Region.
+Functions deploy to whatever region the project's Firestore database lives in. That region is **immutable** — chosen once at project creation (default `australia-southeast1`) and recorded in root `.env` as `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`. `cmd-region.mjs` is the only reader of that value: the functions build runs it to generate `functions/src/region.ts` (gitignored), which `setGlobalOptions` reads at the top of `functions/src/index.ts`. No hardcoded region anywhere to drift, and functions always sit with their data. Don't override per-function — keeping everything in one region avoids cross-region latency and egress. Full mechanics: docs/CLAUDE-STACK.md → Region.
 
 ## Where it's reachable
 
 - **Local emulator:** `http://localhost:5001/{project-id}/{region}/api/...`
 - **Deployed:** `https://{region}-{project}.cloudfunctions.net/api/...` — `{region}` is the project's Firestore region (see above)
-
-The public OAuth routes (`/consent`, `/oauth/callback`) are reached instead via the Hosting domain — `https://{project}.web.app/...` — through the rewrites in `firebase.json`.
 
 To put it at `https://yourdomain/api/...`, add a hosting rewrite in `firebase.json` **above** the SPA catch-all:
 

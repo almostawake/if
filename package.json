@@ -10,6 +10,8 @@
     "check": "cd client && npm run check",
     "auth": "node cmd-auth.mjs",
     "auth:status": "node cmd-auth.mjs --status",
+    "consent": "node cmd-consent.mjs",
+    "consent:status": "node cmd-consent.mjs --status",
     "deploy": "node cmd-deploy.mjs",
     "deploy:hosting": "node cmd-deploy.mjs --only hosting",
     "deploy:functions": "node cmd-deploy.mjs --only functions",

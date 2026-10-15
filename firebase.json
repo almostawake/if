@@ -22,8 +22,6 @@
       }
     ],
     "rewrites": [
-      { "source": "/consent", "function": { "functionId": "api" } },
-      { "source": "/oauth/**", "function": { "functionId": "api" } },
       { "source": "**", "destination": "/index.html" }
     ]
   },

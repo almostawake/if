@@ -2,13 +2,7 @@ import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
-import { projectRegion } from '../cmd-region.mjs';
 import { version } from './package.json';
-
-// The Functions emulator serves at /<project>/<region>/<function>, in the
-// same region the deploy uses (root .env → cmd-region.mjs). Read once here;
-// never spell a region out in this file.
-const EMULATOR_API = `http://localhost:5001/demo-not-required/${projectRegion()}/api`;
 
 // Build id, stamped twice from this one value: compiled into the bundle as
 // `__BUILD_ID__` (define below) and written to dist/version.json (plugin
@@ -57,13 +51,5 @@ export default defineConfig({
     // alias points at `../functions/src/common`. Without this, dev hits
     // a 403 from Vite's fs sandbox the first time the alias resolves.
     fs: { allow: ['..'] },
-    // Public browser-facing OAuth routes live on the `api` function. In prod,
-    // Firebase Hosting rewrites do this same forwarding. Keeps the URL the
-    // user sees identical in dev and prod (e.g. http://localhost:5173/consent
-    // ↔ https://<project>.web.app/consent).
-    proxy: {
-      '/consent': EMULATOR_API,
-      '/oauth': EMULATOR_API,
-    },
   },
 });

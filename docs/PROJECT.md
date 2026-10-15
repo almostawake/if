@@ -39,7 +39,12 @@ does, where it lives, what data it touches.
   that outlives navigation is at risk (docs/CLAUDE-REACT.md § State).
 - **`api` Cloud Function.** The single inbound HTTP endpoint for external
   callers (webhooks, server-to-server), gated by a bearer secret in
-  `functions/.env`. No app-specific routes yet. Conventions: docs/CLAUDE-API.md.
+  `functions/.env`. No app-specific routes yet, and no public routes at all.
+  Conventions: docs/CLAUDE-API.md.
+- **Google consent for the owner's Gmail + Calendar.** Granted once, locally,
+  with `npm run consent`; the refresh token lives in `functions/.env` and
+  `functions/src/googleConsent.ts` hands functions an authorised client.
+  No consumer yet. How: docs/CLAUDE-DEPLOY.md § Google consent.
 
 ## Features
 

@@ -38,9 +38,9 @@ Every Firebase resource for a project lives in **one region**, chosen once when 
 - **Firestore** and the **default Storage bucket** — created with the project. Default `australia-southeast1` (Sydney); single regions only — Functions can't live in a multi-region like `nam5`. **Immutable** once set.
 - **Cloud Functions** (and the Cloud Run services + Artifact Registry repos they spawn) — deploy to that same region automatically. The region is recorded in `.env` as `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`; the functions build generates `functions/src/region.ts` from it (`cmd-region.mjs`), and `setGlobalOptions` reads it in `functions/src/index.ts`. It's baked into source rather than passed as an env var because firebase-tools runs functions discovery in a subprocess with a fixed, minimal env that user values never reach. `region.ts` is gitignored and regenerated on every build.
 
-- **Local dev** follows the same value. The Functions emulator serves at `localhost:5001/demo-not-required/<region>/<function>`, so `client/vite.config.ts` builds its `/consent` + `/oauth` proxy target from `projectRegion()` (exported by `cmd-region.mjs`), and the OAuth dev redirect URI in `functions/src/api/oauth.ts` uses the generated `FUNCTIONS_REGION`. That dev redirect URI is region-specific — register the project's own one on the OAuth client (see `functions/.env.example`).
+- **Local dev** follows the same value. The Functions emulator serves at `localhost:5001/demo-not-required/<region>/<function>`; anything that needs that URL imports `projectRegion()` from `cmd-region.mjs`.
 
-`cmd-region.mjs` is the **only** reader of `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`, and there is deliberately no fallback: with no region in `.env` the functions build and the client dev server both stop with the same message rather than guess. Never write a region literal into code, config, or docs-as-instructions — import it.
+`cmd-region.mjs` is the **only** reader of `THIS_PROJECT_REGION_ON_GOOGLE_HOSTING`, and there is deliberately no fallback: with no region in `.env` the functions build stops with a clear message rather than guess. Never write a region literal into code, config, or docs-as-instructions — import it.
 
 Functions always sit with their data — no cross-region latency or egress. Don't override per-function; if you genuinely need a function elsewhere, set `region` on that specific `onRequest` / `onCall`, not on `setGlobalOptions`.
 
@@ -57,7 +57,7 @@ Project creation also enables these APIs (all `*.googleapis.com`) — treat them
 - **Scheduled jobs** — `cloudscheduler` (`onSchedule` triggers work with no extra setup)
 - **AI** — `aiplatform` (Vertex AI → Gemini). The Functions runtime service account already holds `roles/aiplatform.user` — Gemini calls from Functions need no extra IAM.
 - **Speech-to-text** — `speech` (Cloud Speech-to-Text). Transcribe audio from Functions with the runtime SA's own ADC token — no API key, no outside transcription vendor. If a call ever returns `PERMISSION_DENIED`, grant the runtime SA `roles/speech.client` as part of the feature work.
-- **User-consented data** — `gmail`, `calendar-json` (pairs with the consent flow's default `ADMIN_CONSENTS` scopes)
+- **User-consented data** — `gmail`, `calendar-json` (the owner grants consent locally with `npm run consent` — docs/CLAUDE-DEPLOY.md § Google consent)
 - **Plumbing** — `cloudbilling`, `apikeys`
 
 **Pre-provisioned means use-it-by-default.** When a task needs a capability this list already covers, the enabled service IS the choice — do not substitute an outside provider, and treat a missing API key as a signal to use the platform, not to improvise a workaround. The canonical case is AI: call **Gemini through Vertex AI** (`aiplatform.googleapis.com`, authenticated with the standard Google token — `cmd-auth.mjs` locally, ADC in Functions), **not** the Gemini direct API (`generativelanguage.googleapis.com` with an API key) and not another vendor (Anthropic/OpenAI — no such credentials are provisioned).

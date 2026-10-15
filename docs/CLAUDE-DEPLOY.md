@@ -46,6 +46,24 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 **Multi-account:** pass the email as a positional arg — `node cmd-auth.mjs alice@x.com --token` — uses `~/.if/creds/google.alice@x.com.json`. Add a new account with `npm run auth -- alice@x.com`. Probe-only check: `npm run auth:status` (or `node cmd-auth.mjs alice@x.com --status`).
 
+## Google consent (Gmail / Calendar) — `cmd-consent.mjs`
+
+Separate from the token above. `cmd-auth.mjs` is *who deploys* (Cloud Platform scope, reused across projects, stored in `~/.if/creds`). `cmd-consent.mjs` is *whose mailbox and calendar the app may touch* — one account, project-specific, stored in `functions/.env`. Don't mix them.
+
+- **Grant once:** `npm run consent` (account = `EMAIL_OF_GOOGLE_HOSTING_ACCOUNT`, or pass an email). Browser opens on a throwaway `127.0.0.1` port; click Allow (an account outside the project's Workspace org first sees "Google hasn't verified this app" — Advanced → continue, expected), and the refresh token is written to `functions/.env` as `GOOGLE_HOSTING_CONSENT_REFRESH_TOKEN` + `GOOGLE_HOSTING_CONSENT_EMAIL`. Then `npm run deploy:functions` to ship it. Already stored → the script says so; `--force` re-grants.
+- **Check:** `npm run consent:status` refreshes the token and prints the account and granted scopes.
+- **Local scripts / curl:** `node cmd-consent.mjs --token` prints an access token for the Gmail and Calendar APIs.
+- **In functions:** `consentClient()` / `consentEmail()` from `functions/src/googleConsent.ts`. Add `googleapis` to `functions/package.json` when the first consumer lands.
+- **Scopes:** `ADMIN_CONSENTS` in `functions/.env` (default: full Gmail + full Calendar) must match Data access in Cloud Console → Google Auth Platform; change both, then `--force` to re-grant.
+- **One-time console setup** (Cloud Console → Google Auth Platform, as the deploy account), recorded in docs/PROJECT.md once done:
+  - *Branding:* app name = the project id (easy to track), support email, developer contact.
+  - *Clients:* create one client of type **Desktop app**, name it `<project> consent (local script)`, paste its id/secret into `functions/.env`. Nothing else to register — no redirect URIs, no JavaScript origins.
+  - *Data access:* register exactly the `ADMIN_CONSENTS` scopes plus `openid` and `.../userinfo.email`.
+  - *Audience:* **Internal** when the project sits in a Workspace org and only that org's accounts will ever consent — nothing more to do. **External + "In production"** when an outside account might consent; that needs a home page URL, a privacy-policy URL and an authorised domain on Branding first. Never leave it in **Testing**: Google expires refresh tokens after seven days there.
+  - Workspace trust: accounts in the org that owns the project skip the "unverified app" screen and the 100-user cap for the org's own projects ("Trust internal, domain-owned apps", on by default). Outside accounts see the warning (Advanced → continue) and count against the cap; that is accepted — verification is not planned.
+- Google refresh tokens don't rotate — nothing writes back after the grant. They die on revoke (myaccount.google.com → Security → third-party access) or six months unused; either way `--status` fails and `--force` fixes it.
+- Never add a hosted `/consent` route to do this; the local script is the whole flow.
+
 ## Hard rules — the failure modes that bite fresh sessions
 
 - **Never** read a cred file directly to pluck out an access_token. The stored token is usually expired; the file is meant to be consumed via `cmd-auth.mjs`.
