@@ -16,10 +16,10 @@ export function UsersPage() {
   const users = useUsersStore((s) => s.users);
   const addUser = useUsersStore((s) => s.add);
   const removeUser = useUsersStore((s) => s.remove);
+  const storeError = useUsersStore((s) => s.error);
 
   const [adding, setAdding] = useState(false);
   const [newMobile, setNewMobile] = useState('');
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -39,25 +39,15 @@ export function UsersPage() {
     setError(null);
   }
 
-  async function submitAdd(e: React.FormEvent) {
+  // The store returns on the local write (docs/CLAUDE-OFFLINE.md), so
+  // there is nothing to wait on: a bad number throws before any write,
+  // a good one is on the list by the time the form closes.
+  function submitAdd(e: React.FormEvent) {
     e.preventDefault();
-    if (saving) return;
-    setSaving(true);
     setError(null);
     try {
-      await addUser(newMobile, user?.phoneNumber ?? 'unknown');
+      addUser(newMobile, user?.phoneNumber ?? 'unknown');
       cancelAdd();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function remove(mobile: string) {
-    setError(null);
-    try {
-      await removeUser(mobile);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -74,7 +64,7 @@ export function UsersPage() {
               <button
                 type="button"
                 className="text-err px-1 text-[24px] leading-[26px] hover:opacity-60"
-                onClick={() => remove(item.mobile)}
+                onClick={() => removeUser(item.mobile)}
                 aria-label={`delete ${formatAuMobile(item.mobile)}`}
               >
                 ×
@@ -111,8 +101,8 @@ export function UsersPage() {
                 if (e.key === 'Escape') cancelAdd();
               }}
             />
-            <Button type="submit" disabled={saving || !newMobile.trim()}>
-              {saving ? '…' : 'add'}
+            <Button type="submit" disabled={!newMobile.trim()}>
+              add
             </Button>
             <Button variant="ghost" onClick={cancelAdd}>
               cancel
@@ -121,7 +111,7 @@ export function UsersPage() {
         )}
       </div>
 
-      {error && <div className="text-err mt-3">{error}</div>}
+      {(error ?? storeError) && <div className="text-err mt-3">{error ?? storeError}</div>}
     </>
   );
 }

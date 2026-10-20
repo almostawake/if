@@ -41,6 +41,13 @@ does, where it lives, what data it touches.
   callers (webhooks, server-to-server), gated by a bearer secret in
   `functions/.env`. No app-specific routes yet, and no public routes at all.
   Conventions: docs/CLAUDE-API.md.
+- **Offline-first for documents.** Firestore's persistent cache is on
+  (unlimited, shared across tabs), every collection store subscribes and
+  holds (`usersStore` is the pattern), the whitelist gate and the users
+  list paint from the device with no signal, writes return on the local
+  write and sync when the connection returns, and one-shot server reads
+  are banned by lint. Files (Storage) are designed, not built. Contract:
+  docs/CLAUDE-OFFLINE.md.
 - **Google consent for the owner's Gmail + Calendar.** Granted once, locally,
   with `npm run consent`; the refresh token lives in `functions/.env` and
   `functions/src/googleConsent.ts` hands functions an authorised client.

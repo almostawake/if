@@ -5,3 +5,6 @@ declare const __BUILD_ID__: string;
 
 /** client/package.json's version — shown greyed at the bottom of the menu. */
 declare const __APP_VERSION__: string;
+
+/** The project's one region (docs/CLAUDE-STACK.md § Region) — where callables are reached. */
+declare const __FUNCTIONS_REGION__: string;

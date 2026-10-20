@@ -1,6 +1,15 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  CACHE_SIZE_UNLIMITED,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  connectFirestoreEmulator,
+  type Firestore,
+} from 'firebase/firestore';
+import { getFunctions, connectFunctionsEmulator, type Functions } from 'firebase/functions';
 
 // Local-only fallback config. `demo-not-required` is the Firebase emulator
 // convention for "demo project" mode — no real Firebase project needed for
@@ -39,12 +48,37 @@ const config = {
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
+let fns: Functions | null = null;
 
 export function getFirebase() {
   if (!app) {
     app = getApps()[0] ?? initializeApp(config);
     auth = getAuth(app);
-    db = getFirestore(app);
+    // Persistent (IndexedDB) cache: every document a listener has ever
+    // held stays on the device, reads are served from it first, and
+    // writes made offline queue and sync when connectivity returns
+    // (docs/CLAUDE-OFFLINE.md). Multi-tab manager so a second open tab
+    // doesn't throw and both share the one cache. Unlimited so nothing
+    // is evicted while no listener holds it (app closed) — the held sets
+    // are small, and a 40MB default cap would only add an eviction path.
+    // The catch covers this module being evaluated twice (Vite HMR / a
+    // dynamic import with a different URL): initializeFirestore throws on
+    // the second call, but the already-configured instance is the one we
+    // want.
+    try {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+          cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+        }),
+      });
+    } catch {
+      db = getFirestore(app);
+    }
+    // Callables live in the project's single region (docs/CLAUDE-STACK.md
+    // § Region), stamped into the bundle by vite.config.ts from root .env.
+    // Irrelevant in DEV — the emulator connection below bypasses regions.
+    fns = getFunctions(app, __FUNCTIONS_REGION__);
 
     if (import.meta.env.DEV) {
       // Emulator wiring. The `disableWarnings` flag silences the giant red
@@ -52,7 +86,8 @@ export function getFirebase() {
       // for our purposes.
       connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
       connectFirestoreEmulator(db, 'localhost', 8080);
+      connectFunctionsEmulator(fns, 'localhost', 5001);
     }
   }
-  return { app: app!, auth: auth!, db: db! };
+  return { app: app!, auth: auth!, db: db!, fns: fns! };
 }

@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
 import { version } from './package.json';
+import { projectRegion } from '../cmd-region.mjs';
 
 // Build id, stamped twice from this one value: compiled into the bundle as
 // `__BUILD_ID__` (define below) and written to dist/version.json (plugin
@@ -10,6 +11,18 @@ import { version } from './package.json';
 // deploy. A timestamp rather than a git sha, so every build — even one with
 // no new commits — counts as new.
 const BUILD_ID = new Date().toISOString();
+
+// The region callables are reached in, from root .env via the one reader
+// (cmd-region.mjs). A build with no region stops here on purpose; the dev
+// server tolerates a missing .env because the emulator ignores regions.
+function functionsRegion(isBuild: boolean): string {
+  try {
+    return projectRegion();
+  } catch (e) {
+    if (isBuild) throw e;
+    return 'emulator';
+  }
+}
 
 function versionJson(): Plugin {
   return {
@@ -25,11 +38,15 @@ function versionJson(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss(), versionJson()],
   // The version shows at the bottom of the app menu, so a tester can tell
   // which build they are on.
-  define: { __BUILD_ID__: JSON.stringify(BUILD_ID), __APP_VERSION__: JSON.stringify(version) },
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+    __APP_VERSION__: JSON.stringify(version),
+    __FUNCTIONS_REGION__: JSON.stringify(functionsRegion(command === 'build')),
+  },
   resolve: {
     alias: {
       // `@` is the client's own src. This spelling (not `$lib`) is what
@@ -52,4 +69,4 @@ export default defineConfig({
     // a 403 from Vite's fs sandbox the first time the alias resolves.
     fs: { allow: ['..'] },
   },
-});
+}));
