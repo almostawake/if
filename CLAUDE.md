@@ -38,7 +38,7 @@ The user is a non-developer — a business analyst, project manager, or team lea
 
 ## Hard rules
 
-- Google access tokens come from `node cmd-auth.mjs --token` only. Never read `~/.if/creds/*` files directly, never hand-roll a token refresh, never `gcloud auth login` / `firebase login` (hook-blocked). Details: docs/CLAUDE-DEPLOY.md.
+- Google REST calls go through `cmd-auth.mjs` only: `googleFetch()` in node, `--headers` for curl. Both send the bearer token AND `x-goog-user-project`; a token alone 403s on most management APIs. Never read `~/.if/creds/*` files directly, never hand-roll a token refresh, never `gcloud auth login` / `firebase login` (hook-blocked). Details: docs/CLAUDE-DEPLOY.md.
 - Don't add sign-in providers (OAuth, passwords, email-link, Firebase Anonymous auth) without asking — SMS + whitelist is deliberate (docs/CLAUDE-AUTH.md). Point users to docs/CLAUDE-AUTH.md if they ask for "logins".
 - Don't add a route outside `AppLayout`'s children in `src/router.tsx` without asking. Outside that layout means outside the auth gate, and the app has no public surface by design.
 - Gmail/Calendar access is the owner's one consented account: grant with `npm run consent` (docs/CLAUDE-DEPLOY.md § Google consent), token in `functions/.env`. Never add a hosted consent route or a Firestore grants collection to do this.

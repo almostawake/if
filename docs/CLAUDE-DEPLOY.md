@@ -30,15 +30,21 @@ Do NOT deploy unless the user explicitly asks.
 
 ## Google API calls — `cmd-auth.mjs`
 
-For ANY GCP or Firebase REST/admin call from this project — listing projects, reading Firestore, calling Cloud Functions admin APIs, reading logs, anything that needs a Google bearer token — get the token via `cmd-auth.mjs`. The canonical pattern, verbatim:
+For ANY GCP or Firebase REST/admin call from this project — listing projects, reading Firestore, calling Cloud Functions admin APIs, reading logs, anything that needs a Google bearer token — go through `cmd-auth.mjs`. Every call needs **two** headers: the bearer token and `x-goog-user-project: <project id>` (the cred is a personal sign-in, so Google must be told which project meters the call; without it most management APIs return a 403 `SERVICE_DISABLED` naming consumer `projects/32555940559`, which is Google's gcloud client, not ours). The canonical patterns, verbatim:
 
 ```sh
-TOKEN=$(node cmd-auth.mjs --token)
-curl -s -H "Authorization: Bearer $TOKEN" \
+# curl: both headers, one per line, from the project .env (or --project=<id>)
+curl -s -H @<(node cmd-auth.mjs --headers) \
   https://cloudresourcemanager.googleapis.com/v1/projects | jq .
 ```
 
-`cmd-auth.mjs --token` probes / refreshes / re-grants as needed (logs to stderr) and prints the access_token to stdout. Non-zero exit on failure so callers can error-check.
+```js
+// node: fetch() with both headers added
+import { googleFetch } from './cmd-auth.mjs';
+const res = await googleFetch(`https://firebase.googleapis.com/v1beta1/projects/${pid}`);
+```
+
+`--headers` and `googleFetch()` probe / refresh / re-grant as needed (logs to stderr) and fail with a non-zero exit / thrown error when the account or project can't be resolved. `--token` still prints the bare access_token for the few places something else supplies the project (an ADC file, an SDK).
 
 **When listing projects**, filter out projects pending deletion (`lifecycleState != "ACTIVE"`) and Apps Script-managed projects (project IDs prefixed with `sys-`, or `parent.type == "firebaseAppScript"`). They clutter results and are never deploy targets. A jq filter like `.projects[] | select(.lifecycleState == "ACTIVE" and (.projectId | startswith("sys-") | not))` is usually enough.
 

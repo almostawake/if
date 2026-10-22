@@ -19,15 +19,26 @@
 //   5. On 400 invalid_grant → grant flow.
 //   6. Other refresh failures → throw (network, 5xx, etc.).
 //
-// Library:  import { ensureValidToken } from './cmd-auth.mjs'
+// Library:  import { ensureValidToken, googleFetch } from './cmd-auth.mjs'
 //             ensureValidToken()                       — resolves account (above)
 //             ensureValidToken({ account: '<email>' }) — explicit
+//             googleFetch(url, init?, { account?, project? })
+//                 fetch() with BOTH headers a Google REST call needs
+//                 (bearer token + x-goog-user-project). Use this for every
+//                 Google API call; see "Quota project" below.
 // CLI:      node cmd-auth.mjs                         resolves account (above)
 //           node cmd-auth.mjs <email>                 per-account
 //           node cmd-auth.mjs [<email>] --status      probe-only
 //           node cmd-auth.mjs [<email>] --force       force fresh grant
 //           node cmd-auth.mjs [<email>] --token       print access_token
-//           node cmd-auth.mjs [<email>] --project=<id> also write ADC
+//                                                     (token ONLY — see
+//                                                     --headers for curl)
+//           node cmd-auth.mjs [<email>] --headers     print the two request
+//                                                     headers, one per line:
+//                                                     curl -H @<(node cmd-auth.mjs --headers) URL
+//           node cmd-auth.mjs [<email>] --project=<id> quota project for
+//                                                     --headers; also written
+//                                                     into ADC
 //           node cmd-auth.mjs --discover              first-time sign-in
 //                                                     (no account known up
 //                                                     front; reads email
@@ -36,6 +47,47 @@
 //                                                     <email>.json, prints
 //                                                     the discovered email
 //                                                     to stdout)
+//           node cmd-auth.mjs [...] --incognito        open consent in an
+//                                                     incognito window (no
+//                                                     saved Google sessions;
+//                                                     combine with --force
+//                                                     or --discover)
+//           node cmd-auth.mjs --update                refresh the central
+//                                                     copy at ~/.if/cmd-auth.mjs
+//                                                     from GitHub main
+//
+// Quota project (x-goog-user-project) — READ THIS before any REST call:
+//           The cred is a plain user sign-in, not a project credential.
+//           Google therefore needs to be told which project each API call
+//           is metered against. A bearer token alone CANNOT carry that;
+//           it goes in a per-request header:
+//               x-goog-user-project: <project id>
+//           Without it the Firebase management, Hosting, Identity Toolkit
+//           (Auth admin), Service Usage, Cloud Functions, Logging and most
+//           other *.googleapis.com management APIs fail with
+//               403 PERMISSION_DENIED / reason SERVICE_DISABLED
+//               "consumer": "projects/32555940559"
+//           32555940559 is Google's own gcloud OAuth client project, NOT
+//           yours — that error means the header is missing, never that the
+//           API is disabled. The Firestore data API and Cloud Storage
+//           object API happen to work without the header, which is why a
+//           session gets one good result and then a baffling 403 on the
+//           next call. On *.googleapis.com cloud APIs the header is harmless
+//           where it isn't needed, so ALWAYS send it: googleFetch() and
+//           --headers do. (Known exception: the OAuth userinfo endpoint
+//           rejects it — that is not a cloud API; probe() uses plain fetch.)
+//           Project resolution: { project } / --project=<id> → (googleFetch
+//           only) the /projects/<id>/ segment of the URL → THIS_PROJECT_ID_ON
+//           _GOOGLE_HOSTING in the .env beside this file (the project's, not
+//           the shell's cwd). None → hard error, never a silent omission.
+//
+// One copy per machine: this file also lives at ~/.if/cmd-auth.mjs (n
+//           keeps it fresh; --update refreshes it by hand). A project copy
+//           of this file delegates to that central copy when it is present
+//           and at least as new (VERSION below), passing its own folder as
+//           the project root so .env lookups still hit the project. So
+//           every checkout runs the same code regardless of when it was
+//           cloned. Set IF_CMD_AUTH_LOCAL=1 to force the local copy.
 //
 // Storage:  ~/.if/creds/google.<email>.json   (chmod 600, dir 700)
 //           Outside the project tree on purpose — same Google account is
@@ -82,8 +134,35 @@ const SCOPE = 'openid email https://www.googleapis.com/auth/cloud-platform';
 const HTTP_TIMEOUT_MS = 25_000;
 const BROWSER_TIMEOUT_MS = 300_000;
 
-const PROJECT_ROOT = path.dirname(fileURLToPath(import.meta.url));
+// Bump when behaviour changes. A project copy only delegates to the central
+// copy when the central VERSION is >= its own (string compare on the date).
+export const VERSION = '2026-10-22';
+const RAW_URL = 'https://raw.githubusercontent.com/almostawake/if/main/cmd-auth.mjs';
+
+const SELF = fileURLToPath(import.meta.url);
+const CENTRAL = path.join(os.homedir(), '.if', 'cmd-auth.mjs');
+// The folder whose .env we read. A delegating project copy sets
+// IF_PROJECT_ROOT to its own folder before importing the central copy.
+const PROJECT_ROOT = process.env.IF_PROJECT_ROOT || path.dirname(SELF);
 const CREDS_DIR = path.join(os.homedir(), '.if', 'creds');
+
+// Delegation: when this is a project copy and a central copy exists that is
+// at least as new, load the central copy and route every export through it.
+// `impl` stays null when we ARE the central copy, when none exists, when
+// it is older, or when IF_CMD_AUTH_LOCAL is set.
+let impl = null;
+{
+  const same = (a, b) => { try { return fs.realpathSync(a) === fs.realpathSync(b); } catch { return false; } };
+  if (!process.env.IF_CMD_AUTH_LOCAL && fs.existsSync(CENTRAL) && !same(SELF, CENTRAL)) {
+    process.env.IF_PROJECT_ROOT = PROJECT_ROOT;
+    try {
+      const m = await import(pathToFileURL(CENTRAL).href);
+      if (typeof m.runCli === 'function' && typeof m.VERSION === 'string' && m.VERSION >= VERSION) impl = m;
+    } catch (e) {
+      console.error(`   (central ${CENTRAL} failed to load — using local copy: ${e.message})`);
+    }
+  }
+}
 // Central, machine-wide if config (project parent, default account).
 // We read it as the account fallback.
 const IF_ENV = path.join(os.homedir(), '.if', '.env');
@@ -271,7 +350,7 @@ async function refresh(cred) {
   return tokens;
 }
 
-function openBrowser(url) {
+function openBrowser(url, { incognito = false } = {}) {
   // `open -a APP --args URL`. The `--args` flag is load-bearing — without
   // it, `open -a APP URL` doesn't pass URL via argv to a bash-in-bundle
   // (argc=0 inside the script), macOS falls through to the default URL
@@ -282,17 +361,21 @@ function openBrowser(url) {
   // a single "Chrome with Claude Code" icon. See aa/CLAUDE.md for the
   // saga — d425944 (open -a without --args, broken) and 5248ca3 (direct
   // exec, works but loses Dock attribution) are both regressions of
-  // this form.
+  // this form. --incognito rides along in "$@" and Chrome honours it even
+  // when Chrome-Claude is already running (the singleton opens a fresh
+  // incognito window). Only the launcher path supports it: `open URL` to
+  // the default browser has no way to ask for incognito.
   const launcherApp = path.join(
     process.env.HOME || '',
     'Applications/Chrome with Claude Code.app'
   );
   if (fs.existsSync(launcherApp)) {
-    console.error(`   (opening in Chrome with Claude Code)`);
-    spawn('open', ['-a', launcherApp, '--args', url], { detached: true, stdio: 'ignore' }).unref();
+    console.error(`   (opening in Chrome with Claude Code${incognito ? ', incognito' : ''})`);
+    const chromeArgs = incognito ? ['--incognito', url] : [url];
+    spawn('open', ['-a', launcherApp, '--args', ...chromeArgs], { detached: true, stdio: 'ignore' }).unref();
     return;
   }
-  console.error(`   (launcher not found at ${launcherApp} — using default browser)`);
+  console.error(`   (launcher not found at ${launcherApp} — using default browser${incognito ? '; --incognito ignored' : ''})`);
   const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
   spawn(opener, [url], { detached: true, stdio: 'ignore' }).unref();
 }
@@ -308,7 +391,7 @@ const ERROR_HTML = (msg) => `<!doctype html><meta charset=utf-8><title>Error</ti
 <h1>✗ ${msg}</h1>
 <p>Return to your terminal.</p>`;
 
-async function grant({ timeoutMs, account }) {
+async function grant({ timeoutMs, account, incognito = false }) {
   return new Promise((resolve, reject) => {
     let timer;
     const server = http.createServer(async (req, res) => {
@@ -402,7 +485,7 @@ async function grant({ timeoutMs, account }) {
       const who = account ? ` as ${account}` : '';
       console.error(`⋯  opening browser for sign-in${who} (${secs}s timeout)`);
       console.error(`   if it doesn't open, click: ${url}`);
-      openBrowser(url);
+      openBrowser(url, { incognito });
       timer = setTimeout(() => {
         cleanup();
         reject(new Error(`browser consent timed out after ${secs}s`));
@@ -418,7 +501,11 @@ async function grant({ timeoutMs, account }) {
 // against the same cred. Throws when no valid path forward exists
 // (network down, user dismissed, etc.) or when neither `account` nor
 // EMAIL_OF_GOOGLE_HOSTING_ACCOUNT in .env identifies an account.
-export async function ensureValidToken({ force = false, account, project } = {}) {
+export function ensureValidToken(opts = {}) {
+  return impl ? impl.ensureValidToken(opts) : _ensureValidToken(opts);
+}
+
+async function _ensureValidToken({ force = false, account, project, incognito = false } = {}) {
   const resolved = resolveAccount(account);
   const resolvedProject = resolveProject(project);
   const credFile = credPath(resolved);
@@ -459,7 +546,7 @@ export async function ensureValidToken({ force = false, account, project } = {})
     }
   }
 
-  const { email, tokens } = await grant({ timeoutMs: BROWSER_TIMEOUT_MS, account: resolved });
+  const { email, tokens } = await grant({ timeoutMs: BROWSER_TIMEOUT_MS, account: resolved, incognito });
   const newCred = { email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens };
   writeCred(newCred, resolved);
   if (resolvedProject) writeAdc(newCred, resolvedProject);
@@ -467,14 +554,86 @@ export async function ensureValidToken({ force = false, account, project } = {})
   return tokens.access_token;
 }
 
-// CLI mode.
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isMain) {
-  const args = process.argv.slice(2);
+// The /projects/<id>/ segment most Google REST URLs carry. Project ids are
+// lowercase letters, digits and hyphens; project numbers are digits.
+function projectFromUrl(url) {
+  const m = String(url).match(/\/projects\/([a-z0-9][a-z0-9-]*)(?=[/:?#]|$)/);
+  return m ? m[1] : null;
+}
+
+// Resolve the quota project for a request, or throw. Order: explicit → the
+// /projects/<id>/ in the URL (the call names its own project; metering a
+// call to project A against project B's .env would be wrong) → project .env
+// (for URLs with no project segment: listing projects, billing accounts).
+// Never returns null: a missing quota project is the single most common
+// cause of a confusing 403, so fail here, loudly.
+function requireQuotaProject(project, url) {
+  const p = project || (url ? projectFromUrl(url) : null) || resolveProject(null);
+  if (p) return p;
+  throw new Error(
+    'no quota project: pass { project } / --project=<id>, set ' +
+    'THIS_PROJECT_ID_ON_GOOGLE_HOSTING in .env, or call a URL that contains /projects/<id>/',
+  );
+}
+
+// The two headers every Google REST call needs. Resolves account + project
+// the same way the CLI does; throws when either is unknown.
+async function authHeaders({ account, project, url } = {}) {
+  const quota = requireQuotaProject(project, url);
+  const token = await _ensureValidToken({ account, project: project || null });
+  return { Authorization: `Bearer ${token}`, 'x-goog-user-project': quota };
+}
+
+// fetch() for Google REST APIs. Adds the bearer token and the quota-project
+// header (an x-goog-user-project the caller already set wins). Same
+// signature as fetch plus an options bag; returns the Response untouched.
+export function googleFetch(url, init = {}, opts = {}) {
+  return impl ? impl.googleFetch(url, init, opts) : _googleFetch(url, init, opts);
+}
+
+async function _googleFetch(url, init = {}, { account, project, timeoutMs } = {}) {
+  const headers = new Headers(init.headers || {});
+  const auth = await authHeaders({ account, project, url });
+  headers.set('Authorization', auth.Authorization);
+  if (!headers.has('x-goog-user-project')) headers.set('x-goog-user-project', auth['x-goog-user-project']);
+  return fetchWithTimeout(url, { ...init, headers }, timeoutMs);
+}
+
+// --update: refresh the central copy from GitHub main. No auth needed.
+async function updateCentral() {
+  const res = await fetchWithTimeout(RAW_URL);
+  if (!res.ok) throw new Error(`fetch ${RAW_URL} failed (${res.status})`);
+  const text = await res.text();
+  const m = text.match(/^export const VERSION = '([^']+)'/m);
+  if (!m) throw new Error('downloaded file has no VERSION line — refusing to install it');
+  fs.mkdirSync(path.dirname(CENTRAL), { recursive: true });
+  const tmp = `${CENTRAL}.tmp`;
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, CENTRAL);
+  console.error(`✓  ${CENTRAL} is now VERSION ${m[1]}`);
+}
+
+// CLI. Exported so a project copy can hand its argv to the central copy.
+export function runCli(args) {
+  return impl ? impl.runCli(args) : _runCli(args);
+}
+
+async function _runCli(args) {
   const force = args.includes('--force');
   const status = args.includes('--status');
   const wantsToken = args.includes('--token');
+  const wantsHeaders = args.includes('--headers');
   const discover = args.includes('--discover');
+  // --incognito: open the consent page in an incognito window so no saved
+  // Google session is offered. Only matters when a browser grant actually
+  // happens (--force, --discover, or no usable cred) — a silent refresh
+  // never opens a browser, so on its own the flag is a no-op.
+  const incognito = args.includes('--incognito');
+
+  if (args.includes('--update')) {
+    try { await updateCentral(); process.exit(0); }
+    catch (e) { console.error(`error: ${e.message}`); process.exit(2); }
+  }
   // --project=<id> for ADC writing. Empty value treated as not-set so
   // `--project=` doesn't poison ADC with an empty quota_project_id.
   const projectFlag = args.find(a => a.startsWith('--project='));
@@ -496,7 +655,7 @@ if (isMain) {
       process.exit(2);
     }
     try {
-      const { email, tokens } = await grant({ timeoutMs: BROWSER_TIMEOUT_MS, account: null });
+      const { email, tokens } = await grant({ timeoutMs: BROWSER_TIMEOUT_MS, account: null, incognito });
       const newCred = { email, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, tokens };
       writeCred(newCred, email);
       const resolvedProject = resolveProject(projectArg);
@@ -520,6 +679,8 @@ if (isMain) {
   const credLabel = credPath(account);
 
   if (status) {
+    const viaCentral = process.env.IF_PROJECT_ROOT && PROJECT_ROOT !== path.dirname(SELF);
+    console.error(`   (cmd-auth ${VERSION}${viaCentral ? ` via ${CENTRAL}` : ''}, project root ${PROJECT_ROOT})`);
     const cred = readCred(account);
     if (!cred) {
       console.log(`no cred file at ${credLabel} — sign-in required`);
@@ -544,6 +705,18 @@ if (isMain) {
     }
   }
 
+  // --headers: both request headers, one per line, for curl -H @file.
+  if (wantsHeaders) {
+    try {
+      const h = await authHeaders({ account, project: projectArg });
+      for (const [k, v] of Object.entries(h)) console.log(`${k}: ${v}`);
+      process.exit(0);
+    } catch (e) {
+      console.error(`error: ${e.message}`);
+      process.exit(2);
+    }
+  }
+
   // The bare auth path exists to set up ADC. Without a resolved project,
   // writeAdc is skipped and we'd exit 0 having silently left any stale/broken
   // ADC in place — the caller then thinks auth is ready and fails later with a
@@ -560,11 +733,20 @@ if (isMain) {
   }
 
   try {
-    const token = await ensureValidToken({ force, account, project: projectArg });
-    if (wantsToken) console.log(token);
+    const token = await _ensureValidToken({ force, account, project: projectArg, incognito });
+    if (wantsToken) {
+      console.log(token);
+      if (!resolveProject(projectArg)) {
+        console.error('   note: a token alone is not enough for most Google management APIs —');
+        console.error('         add `x-goog-user-project: <project id>` to each request, or use --headers.');
+      }
+    }
     process.exit(0);
   } catch (e) {
     console.error(`error: ${e.message}`);
     process.exit(2);
   }
 }
+
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) await runCli(process.argv.slice(2));

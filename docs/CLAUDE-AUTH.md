@@ -46,8 +46,7 @@ Two consequences worth knowing:
 
 ```sh
 # what the project currently allows
-TOKEN=$(node cmd-auth.mjs --token)
-curl -s -H "Authorization: Bearer $TOKEN" \
+curl -s -H @<(node cmd-auth.mjs --headers) \
   "https://identitytoolkit.googleapis.com/admin/v2/projects/<PID>/config" \
   | jq '{phone: .signIn.phoneNumber, sms: .smsRegionConfig}'
 ```
