@@ -28,7 +28,6 @@ Three surfaces:
 | Firestore data / schemas | **docs/CLAUDE-STACK.md** § Data model conventions |
 | Any inbound HTTP endpoint (webhook, server-to-server) | **docs/CLAUDE-API.md** |
 | Running the app on this machine — any request to start, stop, restart, or check it, however worded ("run it up", "shut it down", "is it running?", "the servers", "local", "here") — plus seeding data and driving the app in a browser | **docs/CLAUDE-EMULATORS.md** |
-| Any collection, store, write, or file — the app works with no signal | **docs/CLAUDE-OFFLINE.md** — held/live/pinned, the store shape, no server reads, writes return locally; Part 2 is the file design, not built |
 | Sign-in, SMS cost/abuse, whitelist | **docs/CLAUDE-AUTH.md** — read before touching a stored number: everything hinges on E.164 matching the `phone_number` claim exactly |
 | Deploying, Google API tokens, credentials | **docs/CLAUDE-DEPLOY.md** |
 

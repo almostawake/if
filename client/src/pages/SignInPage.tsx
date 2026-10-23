@@ -77,10 +77,15 @@ export function SignInPage() {
     try {
       const signedIn = await AuthService.confirmCode(confirmation, code);
       // Best-effort enrichment of the whitelist row with uid +
-      // lastSignInAt; returns on the local write, the store swallows a
-      // rejection (a non-whitelisted user is bounced by the AppLayout
-      // gate, which is the intended outcome).
-      useUsersStore.getState().recordSignIn(signedIn);
+      // lastSignInAt. Failure shouldn't block the redirect — the user is
+      // signed in either way, and the next sign-in will retry. A user who
+      // isn't whitelisted fails this write silently and is then bounced
+      // by the AppLayout gate, which is the intended outcome.
+      try {
+        await useUsersStore.getState().recordSignIn(signedIn);
+      } catch {
+        /* swallow */
+      }
       navigate('/users', { replace: true });
     } catch (err) {
       setError((err as Error).message);

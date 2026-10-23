@@ -45,21 +45,6 @@ export default ts.config(
       '@typescript-eslint/no-shadow': 'error',
       // Leftover debug logging shouldn't ship silently.
       'no-console': ['warn', { allow: ['warn', 'error'] }],
-      // One-shot reads go to the server first, so offline they stall or
-      // fail; the data is already held by a store. Read it from there.
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            {
-              name: 'firebase/firestore',
-              importNames: ['getDoc', 'getDocs', 'getDocFromServer', 'getDocsFromServer'],
-              message:
-                'Server reads are banned: read from the store that holds the collection. docs/CLAUDE-OFFLINE.md § Read from the store',
-            },
-          ],
-        },
-      ],
     },
   },
   {

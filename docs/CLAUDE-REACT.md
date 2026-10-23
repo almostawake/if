@@ -127,8 +127,6 @@ useUsersStore.getState().recordSignIn(user);
 
 **Store state does not survive a route change after a deploy.** `src/version.ts` reloads the page at the next navigation once a newer build is live. Firestore-backed state simply re-subscribes; a long-lived draft held only in a store would be lost — persist it to `sessionStorage` (or Firestore) if it must outlive navigation.
 
-**A store subscribes and holds; screens read from it, never the server, and writes return on the local write.** `usersStore` is the shape; the contract is docs/CLAUDE-OFFLINE.md.
-
 **`src/state/` is the only place that mutates domain state.** Components go through a store; stores go through `src/services/`; services never import stores. Single source of truth, easy to grep.
 
 ## Routing — React Router v7, declarative mode
@@ -188,8 +186,6 @@ A column is only as wide as its **values** need; the heading is never what sets 
 - Values keep one line and scroll inside their cell.
 
 ### Waiting — anything that can take time shows it, and is got ready ahead where it can be
-
-A Firestore write is not a wait: it returns on the local write and the screen already shows it. No save buttons, dismissal closes rather than cancels, and offline is never narrated — docs/CLAUDE-OFFLINE.md § UX rules.
 
 Applies to anything that goes off to the server after a click — a call, a file to fetch, an upload, an export.
 
