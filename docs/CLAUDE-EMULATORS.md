@@ -12,7 +12,7 @@ The local project id is `demo-not-required` — a Firebase emulator convention, 
 
 Always use the npm scripts, never direct `firebase` commands:
 
-- Emulators: `npm run start:emulators` — logs to `/tmp/firebase-emulator.log`
+- Emulators: `npm run start:emulators` — logs to `.tmp/firebase-emulator.log`
 - Client: `npm run start:client` (Vite dev server, port 5173)
 
 **Detect and reuse first.** On first browser interaction in a conversation, check the ports and start only what's down — never restart something already running:
@@ -27,8 +27,9 @@ Best case is the user running the suite in their own terminal — then you only 
 **If you do start them, start DETACHED — never as a tracked `run_in_background` task.** A background task is owned by the Claude session and gets **hard-killed** (SIGKILL, no cleanup) on teardown — session end, context compaction, and a `/remote-control` connect have all done this. A hard kill skips `--export-on-exit`, so all seeded/emulator data is lost. Detaching reparents the process to the OS (`launchd`/init) so it survives every one of those:
 
 ```sh
-nohup npm run start:emulators >/tmp/firebase-emulator.log 2>&1 </dev/null &
-nohup npm run start:client    >/tmp/vite.log              2>&1 </dev/null &
+mkdir -p .tmp
+nohup npm run start:emulators >.tmp/firebase-emulator.log 2>&1 </dev/null &
+nohup npm run start:client    >.tmp/vite.log              2>&1 </dev/null &
 ```
 
 Then poll the log / ports for readiness — a detached process sends no task notifications.
