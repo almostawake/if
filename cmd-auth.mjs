@@ -114,7 +114,9 @@
 // we verify userinfo.email matches the requested account
 // (case-insensitive). Mismatch = hard error, no file written.
 //
-// Timeouts: HTTP calls = 25s. Browser consent = 5min on every flow.
+// Timeouts: HTTP calls = 25s. Browser consent = 5min on every flow;
+// IF_BROWSER_TIMEOUT_SECS overrides it (the n installer passes its own
+// wait window so all its person-paced steps share one limit).
 //
 // OAuth client: gcloud's public installed-app (client_id 32555940559).
 // Identical client to `gcloud auth login`. cloud-platform scope covers
@@ -132,7 +134,8 @@ const CLIENT_SECRET = 'ZmssLNjJy2998hD4CTg2ejr2';
 const SCOPE = 'openid email https://www.googleapis.com/auth/cloud-platform';
 
 const HTTP_TIMEOUT_MS = 25_000;
-const BROWSER_TIMEOUT_MS = 300_000;
+const BROWSER_TIMEOUT_SECS = Number(process.env.IF_BROWSER_TIMEOUT_SECS);
+const BROWSER_TIMEOUT_MS = (BROWSER_TIMEOUT_SECS > 0 ? BROWSER_TIMEOUT_SECS : 300) * 1000;
 
 // Bump when behaviour changes. A project copy only delegates to the central
 // copy when the central VERSION is >= its own (string compare on the date).
